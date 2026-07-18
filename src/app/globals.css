@@ -1,0 +1,34 @@
+:root {
+  --bg: #07090c;
+  --fg: #d7e0d7;
+  --muted: #6b7580;
+  --lime: #c4ff3e;
+  --red: #ff4d4d;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: var(--mono); overflow: hidden; }
+#canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+
+.hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+.title { position: absolute; top: 16px; left: 0; right: 0; text-align: center; }
+.title h1 { margin: 0; font-size: 15px; letter-spacing: .32em; color: var(--muted); font-weight: 500; text-transform: uppercase; }
+.title .sub { font-size: 11px; color: #3f4750; letter-spacing: .12em; margin-top: 4px; }
+
+.fighters { position: absolute; top: 58px; left: 0; right: 0; display: flex; justify-content: space-between; padding: 0 28px; }
+.fighter { width: 42%; }
+.fighter.r { text-align: right; }
+.fname { font-size: 20px; font-weight: 700; letter-spacing: .02em; margin-bottom: 6px; }
+.hpwrap { height: 12px; border: 1px solid #222b22; background: #0c110c; position: relative; overflow: hidden; }
+.hp { height: 100%; transition: width .18s ease; }
+.hp.r { margin-left: auto; }
+.stat { font-size: 11px; color: var(--muted); margin-top: 5px; letter-spacing: .04em; }
+.stat b.buy { color: var(--lime); } .stat b.sell { color: var(--red); }
+
+.ticker { position: absolute; bottom: 14px; left: 0; right: 0; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; padding: 0 20px; }
+.tick { font-size: 11px; padding: 3px 8px; border: 1px solid #1a221a; background: rgba(10,14,10,.7); letter-spacing: .03em; }
+.tick .b { color: var(--lime); } .tick .s { color: var(--red); }
+
+.round { position: absolute; top: 50%; left: 0; right: 0; text-align: center; transform: translateY(-50%); font-size: 64px; font-weight: 800; letter-spacing: .1em; color: var(--lime); text-shadow: 0 0 40px rgba(196,255,62,.5); opacity: 0; transition: opacity .2s; }
+.round.show { opacity: 1; }
+.foot { position: absolute; bottom: 42px; left: 0; right: 0; text-align: center; font-size: 10px; color: #3a424a; letter-spacing: .18em; text-transform: uppercase; }
