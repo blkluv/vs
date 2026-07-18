@@ -32,3 +32,39 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); f
 .round { position: absolute; top: 50%; left: 0; right: 0; text-align: center; transform: translateY(-50%); font-size: 64px; font-weight: 800; letter-spacing: .1em; color: var(--lime); text-shadow: 0 0 40px rgba(196,255,62,.5); opacity: 0; transition: opacity .2s; }
 .round.show { opacity: 1; }
 .foot { position: absolute; bottom: 42px; left: 0; right: 0; text-align: center; font-size: 10px; color: #3a424a; letter-spacing: .18em; text-transform: uppercase; }
+.title .vs { color: #4a525a; font-weight: 400; }
+
+/* guard bar + pips + combo */
+.guardwrap { height: 5px; border: 1px solid #1a2230; background: #0a0f0c; margin-top: 4px; overflow: hidden; }
+.guard { height: 100%; background: #3a6ea5; opacity: .7; transition: width .2s ease; }
+.pips { display: inline-flex; gap: 4px; vertical-align: middle; margin: 0 6px; }
+.pips i { width: 9px; height: 9px; border: 1px solid #2a3340; display: inline-block; }
+.pips i.on { background: var(--lime); border-color: var(--lime); }
+.fighter.r .pips i.on { background: var(--red); border-color: var(--red); }
+.combo { font-size: 12px; margin-top: 6px; font-weight: 700; letter-spacing: .04em; animation: pop .18s ease; }
+.fighter.r .combo { text-align: right; }
+@keyframes pop { from { transform: scale(1.4); } to { transform: scale(1); } }
+.endbtns { position: absolute; top: 58%; left: 0; right: 0; text-align: center; pointer-events: auto; }
+.endbtns button { font-family: var(--mono); font-size: 14px; color: var(--bg); background: var(--lime); border: none; padding: 12px 22px; cursor: pointer; font-weight: 700; letter-spacing: .04em; }
+
+/* ---------------- selection screen ---------------- */
+.select { position: fixed; inset: 0; overflow-y: auto; padding: 40px 22px 60px; max-width: 1000px; margin: 0 auto; }
+.s-head { text-align: center; margin-bottom: 26px; }
+.s-head h1 { margin: 0; font-size: 40px; font-weight: 800; letter-spacing: .16em; color: var(--fg); text-shadow: 0 0 28px rgba(196,255,62,.18); }
+.s-sub { color: var(--muted); font-size: 12.5px; margin-top: 8px; letter-spacing: .04em; }
+.roster { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.loading { color: var(--muted); grid-column: 1 / -1; text-align: center; padding: 50px 0; }
+.card { position: relative; font-family: var(--mono); text-align: center; background: #0b0f0c; border: 1px solid #1a221a; border-radius: 10px; padding: 16px 12px 14px; cursor: pointer; transition: .14s; color: var(--fg); }
+.card:hover { border-color: var(--c); transform: translateY(-2px); }
+.card.sel { border-color: var(--c); box-shadow: 0 0 0 1px var(--c), 0 0 24px -6px var(--c); }
+.emblem { width: 56px; height: 56px; border-radius: 50%; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; color: #07090c; border: 1px solid rgba(255,255,255,.12); }
+.c-sym { font-size: 15px; font-weight: 700; letter-spacing: .02em; margin-bottom: 8px; }
+.c-bar { height: 5px; display: flex; border-radius: 3px; overflow: hidden; background: #05070500; margin-bottom: 7px; }
+.c-buy { background: var(--lime); } .c-sell { background: var(--red); }
+.c-stat { font-size: 10.5px; color: var(--muted); letter-spacing: .02em; }
+.c-stat .buy { color: var(--lime); } .c-stat .sell { color: var(--red); }
+.c-pick { position: absolute; top: 8px; right: 8px; font-size: 9px; letter-spacing: .06em; color: var(--c); border: 1px solid var(--c); padding: 1px 5px; border-radius: 4px; }
+.s-foot { position: sticky; bottom: 0; text-align: center; padding: 20px 0 6px; margin-top: 24px; background: linear-gradient(transparent, var(--bg) 40%); }
+.enter { font-family: var(--mono); font-size: 15px; font-weight: 700; letter-spacing: .04em; color: var(--bg); background: var(--lime); border: none; border-radius: 8px; padding: 14px 30px; cursor: pointer; }
+.enter:disabled { background: #1a221a; color: var(--muted); cursor: not-allowed; }
+.hint { color: #3a424a; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; margin-top: 12px; }

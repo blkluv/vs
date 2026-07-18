@@ -54,7 +54,7 @@ function buildFighter(colorHex: number, faceDir: number) {
 
 export type Arena = {
   setFighters: (a: { color: number }, b: { color: number }) => void;
-  strike: (attacker: Side, power: number) => void; // buy: lunge + hit opponent
+  strike: (attacker: Side, power: number, crit?: boolean) => void; // buy: lunge + hit opponent
   stagger: (who: Side, power: number) => void; // sell: self recoil
   ko: (loser: Side) => void;
   reset: () => void;
@@ -210,7 +210,7 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
       setColor(left, a.color);
       setColor(right, b.color);
     },
-    strike(attacker, power) {
+    strike(attacker, power, crit) {
       if (state.koActive) return;
       const s = state[attacker];
       if (s.action === "ko") return;
@@ -224,9 +224,9 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
         if (o.action === "ko") return;
         o.action = "recoil";
         o.t = 0;
-        o.power = Math.min(power, 1.4);
-        o.flash = 1;
-        state.shake = Math.min(0.35 + power * 0.3, 0.9);
+        o.power = Math.min(power, 1.4) * (crit ? 1.5 : 1);
+        o.flash = crit ? 1.4 : 1;
+        state.shake = Math.min((crit ? 0.55 : 0.32) + power * 0.3, 1.0);
       }, 130);
     },
     stagger(who, power) {

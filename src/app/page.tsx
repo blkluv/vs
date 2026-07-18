@@ -1,60 +1,120 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Arena, Side } from "@/lib/arena";
+import { createMatch, applyFlow, tick, CFG, type MatchState } from "@/lib/fight";
 
-type FlowEvent = {
-  symbol: string;
-  side: "buy" | "sell";
-  amount: number;
-  quoteValue: number;
-  tx: string;
-};
+type FlowEvent = { symbol: string; side: "buy" | "sell"; quoteValue: number };
 type Trending = { symbol: string; count: number; buys: number; sells: number };
-type Tick = { side: "buy" | "sell"; symbol: string; v: number; id: number };
 
 const LIME = "#c4ff3e";
 const RED = "#ff4d4d";
 
+function hue(sym: string) {
+  let h = 0;
+  for (let i = 0; i < sym.length; i++) h = (h * 31 + sym.charCodeAt(i)) % 360;
+  return h;
+}
+const cardColor = (sym: string) => `hsl(${hue(sym)} 80% 60%)`;
+
 export default function Pit() {
+  const [match, setMatch] = useState<{ left: string; right: string } | null>(null);
+  if (!match) return <Select onStart={(l, r) => setMatch({ left: l, right: r })} />;
+  return <Fight left={match.left} right={match.right} onExit={() => setMatch(null)} key={`${match.left}-${match.right}`} />;
+}
+
+/* ---------------- selection screen ---------------- */
+
+function Select({ onStart }: { onStart: (l: string, r: string) => void }) {
+  const [roster, setRoster] = useState<Trending[]>([]);
+  const [picked, setPicked] = useState<string[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const r = await fetch("/api/flow");
+        const d = await r.json();
+        if (alive && d.trending) setRoster(d.trending);
+      } catch {}
+    };
+    load();
+    const id = setInterval(load, 4000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  const toggle = (sym: string) =>
+    setPicked((p) => (p.includes(sym) ? p.filter((s) => s !== sym) : p.length < 2 ? [...p, sym] : [p[1], sym]));
+
+  return (
+    <div className="select">
+      <div className="s-head">
+        <h1>THE PIT</h1>
+        <div className="s-sub">pick two Robinhood Chain memecoins · their live order flow does the fighting</div>
+      </div>
+
+      <div className="roster">
+        {roster.length === 0 && <div className="loading">reading the trenches…</div>}
+        {roster.map((t) => {
+          const sel = picked.includes(t.symbol);
+          const total = Math.max(1, t.buys + t.sells);
+          const c = cardColor(t.symbol);
+          return (
+            <button key={t.symbol} className={`card ${sel ? "sel" : ""}`} onClick={() => toggle(t.symbol)} style={{ ["--c" as string]: c }}>
+              <div className="emblem" style={{ background: `radial-gradient(circle at 35% 30%, ${c}, #0a0e0a 78%)` }}>
+                {t.symbol.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="c-sym">{t.symbol}</div>
+              <div className="c-bar">
+                <span className="c-buy" style={{ width: `${(t.buys / total) * 100}%` }} />
+                <span className="c-sell" style={{ width: `${(t.sells / total) * 100}%` }} />
+              </div>
+              <div className="c-stat"><b className="buy">{t.buys}▲</b> <b className="sell">{t.sells}▼</b> · {t.count} trades</div>
+              {sel && <div className="c-pick">{picked.indexOf(t.symbol) === 0 ? "① left" : "② right"}</div>}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="s-foot">
+        <button className="enter" disabled={picked.length < 2} onClick={() => onStart(picked[0], picked[1])}>
+          {picked.length < 2 ? `pick ${2 - picked.length} more` : `⚔ ${picked[0]}  vs  ${picked[1]}`}
+        </button>
+        <div className="hint">no token · pure spectacle · by jumpbox</div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- fight screen ---------------- */
+
+function Fight({ left, right, onExit }: { left: string; right: string; onExit: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const arenaRef = useRef<Arena | null>(null);
-
-  // mutable game state (refs so intervals never read stale values)
-  const cursor = useRef<string | undefined>(undefined);
+  const stateRef = useRef<MatchState | null>(null);
   const queue = useRef<FlowEvent[]>([]);
-  const trending = useRef<Trending[]>([]);
-  const fighters = useRef<{ left: string; right: string } | null>(null);
-  const hp = useRef({ left: 100, right: 100 });
-  const koLock = useRef(false);
-
+  const cursor = useRef<string | undefined>(undefined);
   const [, force] = useState(0);
-  const [ticks, setTicks] = useState<Tick[]>([]);
-  const [round, setRound] = useState(0);
-  const [koText, setKoText] = useState<string | null>(null);
-  const repaint = () => force((n) => n + 1);
+  const repaint = useCallback(() => force((n) => (n + 1) % 1e6), []);
 
   useEffect(() => {
     let alive = true;
     let poll: ReturnType<typeof setInterval>;
-    let play: ReturnType<typeof setInterval>;
-    let tid = 0;
+    let drain: ReturnType<typeof setInterval>;
+    let ticker: ReturnType<typeof setInterval>;
 
     (async () => {
       const { createArena } = await import("@/lib/arena");
       if (!alive || !canvasRef.current) return;
       const arena = createArena(canvasRef.current);
       arenaRef.current = arena;
+      stateRef.current = createMatch(left, right, Date.now());
 
-      const sideOf = (sym: string): Side | null =>
-        !fighters.current ? null : sym === fighters.current.left ? "left" : sym === fighters.current.right ? "right" : null;
-
-      const pickFighters = () => {
-        const t = trending.current;
-        if (t.length >= 2) {
-          fighters.current = { left: t[0].symbol, right: t[1].symbol };
-          hp.current = { left: 100, right: 100 };
-          repaint();
+      const applyEffects = (fx: ReturnType<typeof applyFlow>) => {
+        for (const e of fx) {
+          if (e.type === "strike") arena.strike(e.side, e.blocked ? e.power * 0.35 : e.power, e.crit);
+          else if (e.type === "stagger") arena.stagger(e.side, 0.8);
+          else if (e.type === "ko") arena.ko(e.loser);
         }
       };
 
@@ -62,123 +122,81 @@ export default function Pit() {
         try {
           const q = cursor.current ? `?since=${cursor.current}` : "";
           const res = await fetch(`/api/flow${q}`);
-          const data = await res.json();
+          const d = await res.json();
           if (!res.ok) return;
-          cursor.current = data.latestBlock;
-          trending.current = data.trending ?? [];
-          if (!fighters.current) pickFighters();
-          const active = fighters.current;
-          if (active) {
-            for (const e of data.events as FlowEvent[]) {
-              if (e.symbol === active.left || e.symbol === active.right) queue.current.push(e);
-            }
-            if (queue.current.length > 48) queue.current = queue.current.slice(-48);
+          cursor.current = d.latestBlock;
+          for (const e of d.events as FlowEvent[]) {
+            if (e.symbol === left || e.symbol === right) queue.current.push(e);
           }
-          repaint();
-        } catch {
-          /* transient */
-        }
-      };
-
-      const playTick = () => {
-        // gentle regen keeps fights alive
-        hp.current.left = Math.min(100, hp.current.left + 0.5);
-        hp.current.right = Math.min(100, hp.current.right + 0.5);
-
-        const e = queue.current.shift();
-        if (e && !koLock.current) {
-          const side = sideOf(e.symbol);
-          if (side) {
-            const norm = Math.min(e.quoteValue / 0.05, 1.4);
-            if (e.side === "buy") {
-              arena.strike(side, norm);
-              const foe: Side = side === "left" ? "right" : "left";
-              hp.current[foe] = Math.max(0, hp.current[foe] - (5 + norm * 16));
-            } else {
-              arena.stagger(side, norm);
-              hp.current[side] = Math.max(0, hp.current[side] - (3 + norm * 6));
-            }
-            setTicks((prev) => [{ side: e.side, symbol: e.symbol, v: e.quoteValue, id: tid++ }, ...prev].slice(0, 9));
-          }
-        }
-
-        // KO check
-        if (!koLock.current && fighters.current) {
-          const loser: Side | null = hp.current.left <= 0 ? "left" : hp.current.right <= 0 ? "right" : null;
-          if (loser) {
-            koLock.current = true;
-            const winner = loser === "left" ? fighters.current.right : fighters.current.left;
-            arena.ko(loser);
-            setKoText(`${winner} wins`);
-            setTimeout(() => {
-              if (!alive) return;
-              arena.reset();
-              queue.current = [];
-              koLock.current = false;
-              setKoText(null);
-              setRound((r) => r + 1);
-              pickFighters(); // rematch on the freshest trending pair
-            }, 1900);
-          }
-        }
-        repaint();
+          if (queue.current.length > 60) queue.current = queue.current.slice(-60);
+        } catch {}
       };
 
       await pollFlow();
       poll = setInterval(pollFlow, 2500);
-      play = setInterval(playTick, 360);
+      drain = setInterval(() => {
+        const st = stateRef.current!;
+        const e = queue.current.shift();
+        if (e && st.phase === "fight") applyEffects(applyFlow(st, e, Date.now()));
+        repaint();
+      }, 360);
+      ticker = setInterval(() => {
+        const st = stateRef.current!;
+        applyEffects(tick(st, Date.now(), 100));
+        repaint();
+      }, 100);
     })();
 
     return () => {
       alive = false;
       clearInterval(poll);
-      clearInterval(play);
+      clearInterval(drain);
+      clearInterval(ticker);
       arenaRef.current?.dispose();
     };
-  }, []);
+  }, [left, right, repaint]);
 
-  const f = fighters.current;
-  const barL = hp.current.left;
-  const barR = hp.current.right;
-  const statOf = (sym?: string) => trending.current.find((t) => t.symbol === sym);
+  const st = stateRef.current;
+  const pct = (v: number) => `${Math.max(0, Math.min(100, (v / CFG.HP_MAX) * 100))}%`;
+  const timeLeft = st && st.phase === "fight" ? Math.max(0, Math.ceil((st.roundEndsAt - Date.now()) / 1000)) : null;
+  const pips = (won: number) => Array.from({ length: CFG.ROUNDS_TO_WIN }, (_, i) => i < won);
 
   return (
     <>
       <canvas id="canvas" ref={canvasRef} />
       <div className="hud">
         <div className="title">
-          <h1>The Pit</h1>
-          <div className="sub">live Robinhood Chain order flow · buys strike · sells stagger</div>
+          <h1>{left} <span className="vs">vs</span> {right}</h1>
+          <div className="sub">round {st?.round ?? 1} · {timeLeft !== null ? `${timeLeft}s` : "—"} · buys strike · sells expose</div>
         </div>
 
         <div className="fighters">
           <div className="fighter">
-            <div className="fname" style={{ color: LIME }}>{f?.left ?? "matching…"}</div>
-            <div className="hpwrap"><div className="hp" style={{ width: `${barL}%`, background: LIME }} /></div>
-            <div className="stat">
-              <b className="buy">{statOf(f?.left)?.buys ?? 0} buys</b> · <b className="sell">{statOf(f?.left)?.sells ?? 0} sells</b>
+            <div className="fname" style={{ color: LIME }}>
+              {left} <span className="pips">{pips(st?.left.roundsWon ?? 0).map((w, i) => <i key={i} className={w ? "on" : ""} />)}</span>
             </div>
+            <div className="hpwrap"><div className="hp" style={{ width: pct(st?.left.hp ?? CFG.HP_MAX), background: LIME }} /></div>
+            <div className="guardwrap"><div className="guard" style={{ width: `${st?.left.guard ?? 100}%` }} /></div>
+            {(st?.left.combo ?? 0) >= 2 && <div className="combo" style={{ color: LIME }}>combo ×{st!.left.combo + 1}</div>}
           </div>
           <div className="fighter r">
-            <div className="fname" style={{ color: RED }}>{f?.right ?? "matching…"}</div>
-            <div className="hpwrap"><div className="hp r" style={{ width: `${barR}%`, background: RED, marginLeft: "auto" }} /></div>
-            <div className="stat">
-              <b className="buy">{statOf(f?.right)?.buys ?? 0} buys</b> · <b className="sell">{statOf(f?.right)?.sells ?? 0} sells</b>
+            <div className="fname" style={{ color: RED }}>
+              <span className="pips r">{pips(st?.right.roundsWon ?? 0).map((w, i) => <i key={i} className={w ? "on" : ""} />)}</span> {right}
             </div>
+            <div className="hpwrap"><div className="hp r" style={{ width: pct(st?.right.hp ?? CFG.HP_MAX), background: RED, marginLeft: "auto" }} /></div>
+            <div className="guardwrap"><div className="guard r" style={{ width: `${st?.right.guard ?? 100}%`, marginLeft: "auto" }} /></div>
+            {(st?.right.combo ?? 0) >= 2 && <div className="combo r" style={{ color: RED }}>combo ×{st!.right.combo + 1}</div>}
           </div>
         </div>
 
-        <div className={`round ${koText ? "show" : ""}`}>{koText}</div>
+        <div className={`round ${st?.banner ? "show" : ""}`}>{st?.banner}</div>
 
-        <div className="ticker">
-          {ticks.map((t) => (
-            <span key={t.id} className="tick">
-              <span className={t.side === "buy" ? "b" : "s"}>{t.side === "buy" ? "▲ buy" : "▼ sell"}</span> {t.symbol}
-            </span>
-          ))}
-        </div>
-
-        <div className="foot">round {round + 1} · live on Robinhood Chain · by jumpbox</div>
+        {st?.phase === "matchEnd" && (
+          <div className="endbtns">
+            <button onClick={onExit}>← new match</button>
+          </div>
+        )}
+        <div className="foot">live on Robinhood Chain · by jumpbox</div>
       </div>
     </>
   );

@@ -146,7 +146,7 @@ export async function getFlow(sinceArg?: bigint): Promise<{
     tally.set(key, t);
   }
 
-  const trending = [...tally.values()].sort((a, b) => b.count - a.count).slice(0, 8);
+  const trending = [...tally.values()].sort((a, b) => b.count - a.count).slice(0, 12);
   // keep only the most recent MAX_EVENTS, oldest-first so the client plays them in order
   const trimmed = events.slice(-MAX_EVENTS);
 
