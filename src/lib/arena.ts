@@ -76,7 +76,7 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
     actions: Record<string, THREE.AnimationAction>;
     current?: THREE.AnimationAction;
     mains: THREE.MeshStandardMaterial[];
-    decal: THREE.Mesh;
+    decal: THREE.Sprite;
     base: number;
     toCenter: number;
     phase: number;
@@ -111,7 +111,7 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
     if (opt.logo) {
       texLoader.load(
         `/api/logo?url=${encodeURIComponent(opt.logo)}`,
-        (tex) => { tex.colorSpace = THREE.SRGBColorSpace; (f.decal.material as THREE.MeshBasicMaterial).map = tex; (f.decal.material as THREE.MeshBasicMaterial).needsUpdate = true; f.decal.visible = true; },
+        (tex) => { tex.colorSpace = THREE.SRGBColorSpace; (f.decal.material as THREE.SpriteMaterial).map = tex; (f.decal.material as THREE.SpriteMaterial).needsUpdate = true; f.decal.visible = true; },
         undefined,
         () => { f.decal.visible = false; },
       );
@@ -148,14 +148,11 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
         }
       });
 
-      // logo decal on a small plane at chest height, facing the opponent
-      const decal = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.9, 0.9),
-        new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false }),
-      );
-      decal.position.set(base + toCenter * 0.55, 1.5, 0);
-      decal.rotation.y = toCenter > 0 ? Math.PI / 2 : -Math.PI / 2;
-      decal.renderOrder = 5;
+      // token logo as a billboard floating above the head, always facing the camera
+      const decal = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false, depthTest: false, toneMapped: false }));
+      decal.scale.set(1.0, 1.0, 1);
+      decal.position.set(base, 3.0, 0);
+      decal.renderOrder = 20;
       decal.visible = false;
       scene.add(decal);
 
@@ -210,6 +207,7 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
       else if (f.act === "stagger") { f.t += dt; if (f.t > 0.5) { f.act = "idle"; f.t = 0; } }
       f.xoff += (targetX - f.xoff) * Math.min(1, dt * 16);
       f.root.position.x = f.base + f.xoff;
+      f.decal.position.x = f.root.position.x; // logo billboard follows the fighter
 
       if (f.flash > 0) { f.flash = Math.max(0, f.flash - dt * 3.2); for (const m of f.mains) m.emissiveIntensity = 0.12 + f.flash * 1.6; }
     }
