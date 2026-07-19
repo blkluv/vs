@@ -75,6 +75,57 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); f
 .enter:disabled { background: #1a221a; color: var(--muted); cursor: not-allowed; }
 .hint { color: #3a424a; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; margin-top: 12px; }
 
+/* ---------------- paginated memecoin list ---------------- */
+.mlist { display: flex; flex-direction: column; gap: 6px; }
+.mrow { display: flex; align-items: center; gap: 12px; padding: 9px 14px; background: #0b0f0c; border: 1px solid #161d16; border-radius: 8px; cursor: pointer; transition: .12s; text-align: left; font-family: var(--mono); color: var(--fg); width: 100%; }
+.mrow:hover { border-color: var(--c); }
+.mrow.sel { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); }
+.midx { width: 24px; color: #4a524a; font-size: 11px; flex-shrink: 0; }
+.mlogo { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid rgba(255,255,255,.1); background: #0a0e0a; }
+.mlogo-fb { display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #07090c; background: radial-gradient(circle at 35% 30%, var(--c), #0a0e0a 80%); }
+.mname { flex: 1; min-width: 0; }
+.mname .ms { font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mname .mc { font-size: 11px; color: var(--muted); }
+.mflow { width: 140px; flex-shrink: 0; }
+.mbar { height: 5px; display: flex; border-radius: 3px; overflow: hidden; margin-bottom: 3px; background: #05070500; }
+.mbar .b { background: var(--lime); } .mbar .s { background: var(--red); }
+.mst { font-size: 10.5px; color: var(--muted); }
+.mst .buy { color: var(--lime); } .mst .sell { color: var(--red); }
+.mpick { width: 54px; text-align: right; font-size: 10px; color: var(--c); flex-shrink: 0; letter-spacing: .04em; }
+.pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 16px 0 4px; color: var(--muted); font-size: 12px; }
+.pager button { font-family: var(--mono); background: transparent; border: 1px solid #1a221a; color: var(--fg); padding: 6px 13px; cursor: pointer; border-radius: 6px; }
+.pager button:disabled { opacity: .35; cursor: not-allowed; }
+
+/* ---------------- cinematic VS intro ---------------- */
+.intro { position: fixed; inset: 0; overflow: hidden; cursor: pointer; background: #05070a; }
+.intro-bg { position: absolute; inset: 0; background: radial-gradient(62% 62% at 50% 44%, #0e1420, #05070a 76%); }
+.intro-bg::after { content: ""; position: absolute; inset: 0; background-image: linear-gradient(#0c141c 1px, transparent 1px), linear-gradient(90deg, #0c141c 1px, transparent 1px); background-size: 42px 42px; opacity: .22; -webkit-mask: radial-gradient(circle at 50% 45%, #000, transparent 68%); mask: radial-gradient(circle at 50% 45%, #000, transparent 68%); }
+.intro-flash { position: absolute; inset: 0; background: #fff; opacity: 0; animation: iflash .55s ease .62s both; }
+@keyframes iflash { 0% { opacity: 0; } 12% { opacity: .85; } 100% { opacity: 0; } }
+.tape { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.tcard { position: relative; width: 32%; max-width: 350px; padding: 26px 22px; background: linear-gradient(160deg, rgba(20,26,20,.92), rgba(8,10,10,.92)); border: 1px solid var(--c); border-radius: 14px; text-align: center; box-shadow: 0 0 60px -18px var(--c); }
+.tcard.left { animation: slamL .7s cubic-bezier(.16,.9,.3,1.05) both; }
+.tcard.right { animation: slamR .7s cubic-bezier(.16,.9,.3,1.05) .12s both; }
+@keyframes slamL { from { transform: translateX(-150%) rotate(-10deg); opacity: 0; } 72% { opacity: 1; } to { transform: translateX(0) rotate(-3deg); opacity: 1; } }
+@keyframes slamR { from { transform: translateX(150%) rotate(10deg); opacity: 0; } 72% { opacity: 1; } to { transform: translateX(0) rotate(3deg); opacity: 1; } }
+.tglow { position: absolute; inset: -1px; border-radius: 14px; box-shadow: inset 0 0 44px -22px var(--c); pointer-events: none; }
+.tlogo { width: 118px; height: 118px; border-radius: 50%; object-fit: cover; margin: 0 auto 16px; display: block; border: 2px solid var(--c); box-shadow: 0 0 40px -8px var(--c); background: #0a0e0a; }
+.tlogo-fb { display: flex; align-items: center; justify-content: center; font-size: 42px; font-weight: 800; color: #07090c; background: radial-gradient(circle at 35% 30%, var(--c), #0a0e0a 78%); }
+.tsym { font-size: 30px; font-weight: 800; letter-spacing: .01em; margin-bottom: 16px; color: #fff; overflow: hidden; text-overflow: ellipsis; }
+.tstats { animation: fadeUp .5s ease 1s both; }
+.trow { display: flex; justify-content: space-between; font-size: 13px; padding: 7px 4px; border-top: 1px solid rgba(255,255,255,.06); }
+.trow span { color: var(--muted); letter-spacing: .1em; }
+.trow b { color: var(--fg); font-weight: 700; }
+.trow .buy { color: var(--lime); } .trow .sell { color: var(--red); }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.vsmark { position: relative; z-index: 5; font-size: 60px; font-weight: 900; color: #fff; margin: 0 -12px; text-shadow: 0 0 30px rgba(196,255,62,.6), 0 4px 10px #000; animation: vsslam .5s cubic-bezier(.2,1.6,.3,1) .58s both; }
+@keyframes vsslam { 0% { transform: scale(4) rotate(-12deg); opacity: 0; } 60% { transform: scale(.86); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+.fightword { position: absolute; left: 0; right: 0; bottom: 11%; text-align: center; font-size: 54px; font-weight: 900; letter-spacing: .3em; color: var(--lime); text-shadow: 0 0 40px rgba(196,255,62,.6); opacity: 0; }
+.fightword.show { animation: fightin .5s cubic-bezier(.2,1.4,.3,1) both; }
+@keyframes fightin { 0% { opacity: 0; transform: scale(2.2); letter-spacing: .6em; } 100% { opacity: 1; transform: scale(1); letter-spacing: .3em; } }
+.skiphint { position: absolute; bottom: 22px; right: 24px; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: #3a424a; }
+@media (max-width: 640px) { .tcard { width: 42%; padding: 18px 12px; } .tlogo { width: 84px; height: 84px; } .tsym { font-size: 22px; } .vsmark { font-size: 40px; } }
+
 /* commentator */
 .callout { position: absolute; top: 40%; left: 0; right: 0; text-align: center; font-size: 26px; font-weight: 800; letter-spacing: .01em; color: var(--fg); text-shadow: 0 2px 20px rgba(0,0,0,.7); padding: 0 24px; animation: shout .5s ease; pointer-events: none; }
 .callout.high { color: #fff; font-size: 32px; text-shadow: 0 0 30px rgba(196,255,62,.5); }

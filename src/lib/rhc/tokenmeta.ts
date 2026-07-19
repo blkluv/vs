@@ -13,33 +13,40 @@ export type TokenMeta = {
 const cache = new Map<string, { meta: TokenMeta; ts: number }>();
 const TTL = 60_000;
 
-// DexScreener indexes Robinhood Chain (chainId "robinhood"); batch up to ~30 tokens.
+// DexScreener indexes Robinhood Chain (chainId "robinhood"); its batch endpoint
+// caps at 30 addresses, so chunk.
 async function fetchDexBatch(addrs: Address[]): Promise<Map<string, Partial<TokenMeta>>> {
   const out = new Map<string, Partial<TokenMeta>>();
-  if (!addrs.length) return out;
-  try {
-    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addrs.join(",")}`, {
-      headers: { "user-agent": "pit/1.0 (+jumpbox.tech)" },
-    });
-    const j = (await res.json()) as { pairs?: any[] };
-    const byToken = new Map<string, any[]>();
-    for (const p of j.pairs ?? []) {
-      const a = p.baseToken?.address?.toLowerCase();
-      if (!a) continue;
-      (byToken.get(a) ?? byToken.set(a, []).get(a)!).push(p);
-    }
-    for (const [a, pairs] of byToken) {
-      const best = pairs.sort((x, y) => (y.liquidity?.usd || 0) - (x.liquidity?.usd || 0))[0];
-      out.set(a, {
-        logo: best.info?.imageUrl ?? null,
-        priceUsd: best.priceUsd ? Number(best.priceUsd) : null,
-        mcap: best.marketCap ?? best.fdv ?? null,
-        liq: best.liquidity?.usd ?? null,
-      });
-    }
-  } catch {
-    /* DexScreener transient — supply still comes from chain */
-  }
+  const chunks: Address[][] = [];
+  for (let i = 0; i < addrs.length; i += 30) chunks.push(addrs.slice(i, i + 30));
+
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      try {
+        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(",")}`, {
+          headers: { "user-agent": "pit/1.0 (+jumpbox.tech)" },
+        });
+        const j = (await res.json()) as { pairs?: any[] };
+        const byToken = new Map<string, any[]>();
+        for (const p of j.pairs ?? []) {
+          const a = p.baseToken?.address?.toLowerCase();
+          if (!a) continue;
+          (byToken.get(a) ?? byToken.set(a, []).get(a)!).push(p);
+        }
+        for (const [a, pairs] of byToken) {
+          const best = pairs.sort((x, y) => (y.liquidity?.usd || 0) - (x.liquidity?.usd || 0))[0];
+          out.set(a, {
+            logo: best.info?.imageUrl ?? null,
+            priceUsd: best.priceUsd ? Number(best.priceUsd) : null,
+            mcap: best.marketCap ?? best.fdv ?? null,
+            liq: best.liquidity?.usd ?? null,
+          });
+        }
+      } catch {
+        /* DexScreener transient — supply still comes from chain */
+      }
+    }),
+  );
   return out;
 }
 

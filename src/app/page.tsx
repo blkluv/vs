@@ -21,16 +21,88 @@ const fmtCap = (n: number | null) => (n == null ? "—" : n >= 1e9 ? `$${(n / 1e
 const fmtAmt = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : n.toFixed(0));
 
 export default function Pit() {
-  const [match, setMatch] = useState<{ left: Fighter; right: Fighter } | null>(null);
-  if (!match) return <Select onStart={(l, r) => setMatch({ left: l, right: r })} />;
-  return <Fight left={match.left} right={match.right} onExit={() => setMatch(null)} key={`${match.left.symbol}-${match.right.symbol}`} />;
+  const [phase, setPhase] = useState<"select" | "intro" | "fight">("select");
+  const [f, setF] = useState<{ left: Fighter; right: Fighter } | null>(null);
+
+  if (phase === "select" || !f)
+    return <Select onStart={(l, r) => { setF({ left: l, right: r }); setPhase("intro"); }} />;
+  if (phase === "intro")
+    return <Intro left={f.left} right={f.right} onDone={() => setPhase("fight")} />;
+  return <Fight left={f.left} right={f.right} onExit={() => { setF(null); setPhase("select"); }} key={`${f.left.symbol}-${f.right.symbol}`} />;
+}
+
+/* ---------------- cinematic VS intro ---------------- */
+
+function useCountUp(target: number | null, dur = 1000, delay = 950): number {
+  const [v, setV] = useState(0);
+  useEffect(() => {
+    if (target == null) return;
+    let raf = 0;
+    let start: number | undefined;
+    const to = setTimeout(() => {
+      const step = (ts: number) => {
+        if (start === undefined) start = ts;
+        const p = Math.min((ts - start) / dur, 1);
+        setV(target * (1 - Math.pow(1 - p, 3)));
+        if (p < 1) raf = requestAnimationFrame(step);
+      };
+      raf = requestAnimationFrame(step);
+    }, delay);
+    return () => { clearTimeout(to); cancelAnimationFrame(raf); };
+  }, [target, dur, delay]);
+  return v;
+}
+
+function TapeCard({ f, side }: { f: Fighter; side: "left" | "right" }) {
+  const c = cardColor(f.symbol);
+  const mcap = useCountUp(f.mcap ?? null, 1100, 1000);
+  const supply = useCountUp(f.supply ?? null, 1100, 1050);
+  return (
+    <div className={`tcard ${side}`} style={{ ["--c" as string]: c }}>
+      <div className="tglow" />
+      {f.logo ? <img className="tlogo" src={f.logo} alt="" /> : <div className="tlogo tlogo-fb">{f.symbol.slice(0, 2).toUpperCase()}</div>}
+      <div className="tsym">{f.symbol}</div>
+      <div className="tstats">
+        <div className="trow"><span>MCAP</span><b>{f.mcap == null ? "—" : fmtCap(mcap)}</b></div>
+        <div className="trow"><span>SUPPLY</span><b>{f.supply == null ? "—" : fmtAmt(supply)}</b></div>
+        <div className="trow"><span>FLOW</span><b><i className="buy">{f.buys}▲</i> <i className="sell">{f.sells}▼</i></b></div>
+      </div>
+    </div>
+  );
+}
+
+function Intro({ left, right, onDone }: { left: Fighter; right: Fighter; onDone: () => void }) {
+  const [end, setEnd] = useState(false);
+  useEffect(() => {
+    const ann = setTimeout(() => speak(`${left.symbol}... versus... ${right.symbol}`, "high", false), 700);
+    const fw = setTimeout(() => setEnd(true), 2900);
+    const done = setTimeout(onDone, 3650);
+    return () => { clearTimeout(ann); clearTimeout(fw); clearTimeout(done); };
+  }, [left, right, onDone]);
+
+  return (
+    <div className="intro" onClick={onDone}>
+      <div className="intro-bg" />
+      <div className="intro-flash" />
+      <div className="tape">
+        <TapeCard f={left} side="left" />
+        <div className="vsmark">VS</div>
+        <TapeCard f={right} side="right" />
+      </div>
+      <div className={`fightword ${end ? "show" : ""}`}>FIGHT</div>
+      <div className="skiphint">click to skip</div>
+    </div>
+  );
 }
 
 /* ---------------- selection screen ---------------- */
 
+const PER_PAGE = 10;
+
 function Select({ onStart }: { onStart: (l: Fighter, r: Fighter) => void }) {
   const [roster, setRoster] = useState<Fighter[]>([]);
   const [picked, setPicked] = useState<string[]>([]);
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -48,8 +120,11 @@ function Select({ onStart }: { onStart: (l: Fighter, r: Fighter) => void }) {
 
   const toggle = (sym: string) =>
     setPicked((p) => (p.includes(sym) ? p.filter((s) => s !== sym) : p.length < 2 ? [...p, sym] : [p[1], sym]));
-
   const bySym = (s: string) => roster.find((t) => t.symbol === s)!;
+
+  const pages = Math.max(1, Math.ceil(roster.length / PER_PAGE));
+  const pg = Math.min(page, pages - 1);
+  const visible = roster.slice(pg * PER_PAGE, pg * PER_PAGE + PER_PAGE);
 
   return (
     <div className="select">
@@ -58,31 +133,43 @@ function Select({ onStart }: { onStart: (l: Fighter, r: Fighter) => void }) {
         <div className="s-sub">pick two Robinhood Chain memecoins · their live order flow does the fighting</div>
       </div>
 
-      <div className="roster">
-        {roster.length === 0 && <div className="loading">reading the trenches…</div>}
-        {roster.map((t) => {
-          const sel = picked.includes(t.symbol);
-          const total = Math.max(1, t.buys + t.sells);
-          const c = cardColor(t.symbol);
-          return (
-            <button key={t.symbol} className={`card ${sel ? "sel" : ""}`} onClick={() => toggle(t.symbol)} style={{ ["--c" as string]: c }}>
-              {t.logo ? (
-                <img className="emblem-img" src={t.logo} alt="" />
-              ) : (
-                <div className="emblem" style={{ background: `radial-gradient(circle at 35% 30%, ${c}, #0a0e0a 78%)` }}>{t.symbol.slice(0, 2).toUpperCase()}</div>
-              )}
-              <div className="c-sym">{t.symbol}</div>
-              <div className="c-cap">{fmtCap(t.mcap)}</div>
-              <div className="c-bar">
-                <span className="c-buy" style={{ width: `${(t.buys / total) * 100}%` }} />
-                <span className="c-sell" style={{ width: `${(t.sells / total) * 100}%` }} />
-              </div>
-              <div className="c-stat"><b className="buy">{t.buys}▲</b> <b className="sell">{t.sells}▼</b></div>
-              {sel && <div className="c-pick">{picked.indexOf(t.symbol) === 0 ? "① left" : "② right"}</div>}
-            </button>
-          );
-        })}
-      </div>
+      {roster.length === 0 ? (
+        <div className="loading">reading the trenches…</div>
+      ) : (
+        <>
+          <div className="mlist">
+            {visible.map((t, i) => {
+              const sel = picked.includes(t.symbol);
+              const total = Math.max(1, t.buys + t.sells);
+              const c = cardColor(t.symbol);
+              const rank = pg * PER_PAGE + i + 1;
+              return (
+                <button key={t.symbol} className={`mrow ${sel ? "sel" : ""}`} onClick={() => toggle(t.symbol)} style={{ ["--c" as string]: c }}>
+                  <span className="midx">{rank}</span>
+                  {t.logo ? <img className="mlogo" src={t.logo} alt="" /> : <span className="mlogo mlogo-fb">{t.symbol.slice(0, 2).toUpperCase()}</span>}
+                  <div className="mname">
+                    <div className="ms">{t.symbol}</div>
+                    <div className="mc">{fmtCap(t.mcap)} mcap{t.supply ? ` · ${fmtAmt(t.supply)} supply` : ""}</div>
+                  </div>
+                  <div className="mflow">
+                    <div className="mbar">
+                      <span className="b" style={{ width: `${(t.buys / total) * 100}%` }} />
+                      <span className="s" style={{ width: `${(t.sells / total) * 100}%` }} />
+                    </div>
+                    <div className="mst"><span className="buy">{t.buys}▲</span> <span className="sell">{t.sells}▼</span> · {t.count} trades</div>
+                  </div>
+                  <span className="mpick">{sel ? (picked.indexOf(t.symbol) === 0 ? "① left" : "② right") : ""}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="pager">
+            <button disabled={pg <= 0} onClick={() => setPage(pg - 1)}>← prev</button>
+            <span>page {pg + 1} / {pages} · {roster.length} trading</span>
+            <button disabled={pg >= pages - 1} onClick={() => setPage(pg + 1)}>next →</button>
+          </div>
+        </>
+      )}
 
       <div className="s-foot">
         <button className="enter" disabled={picked.length < 2} onClick={() => onStart(bySym(picked[0]), bySym(picked[1]))}>

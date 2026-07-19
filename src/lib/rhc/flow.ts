@@ -162,7 +162,7 @@ export async function getFlow(sinceArg?: bigint): Promise<{
     tally.set(key, t);
   }
 
-  const trending = [...tally.values()].sort((a, b) => b.count - a.count).slice(0, 12);
+  const trending = [...tally.values()].sort((a, b) => b.count - a.count).slice(0, 40);
 
   // enrich the roster with logo + market cap (DexScreener) + total supply (on-chain)
   try {
