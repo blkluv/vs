@@ -240,11 +240,12 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
       legLz = -0.14 - ki * 0.32;
       if (p >= 1) { s.act = "idle"; s.t = 0; }
     } else if (s.act === "stagger") {
-      const p = Math.min(s.t / 0.55, 1), w = Math.sin(p * Math.PI);
-      rootRz = s.toCenter * w * 0.14;
-      hipsRz = Math.sin(s.t * 26) * 0.09 * (1 - p);
-      aFz = 0.66 - w * 0.62; aBz = 0.86 - w * 0.5;
-      neckRx = w * 0.25;
+      // sell = drop the guard, open up (exposed) — a slow off-balance opening, not a hit jolt
+      const p = Math.min(s.t / 0.6, 1), w = Math.sin(p * Math.PI);
+      rootRz = -s.toCenter * w * 0.08;
+      aFz = 0.66 - w * 0.72; aFy = -0.38 + w * 0.3;
+      aBz = 0.86 - w * 0.55;
+      neckRx = -w * 0.12;
       if (p >= 1) { s.act = "idle"; s.t = 0; }
     } else if (s.act === "ko") {
       const p = Math.min(s.t / 1.15, 1);
@@ -371,7 +372,7 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
       s.act = "stagger";
       s.t = 0;
       s.power = Math.min(power * 0.7, 0.9);
-      s.flash = 0.5;
+      // no flash — a sell is "guard dropped / exposed", NOT a hit (hits flash + recoil)
     },
     ko(loser) {
       koActive = true;
