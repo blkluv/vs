@@ -81,17 +81,27 @@ function TapeCard({ f, side }: { f: Fighter; side: "left" | "right" }) {
 }
 
 function Intro({ left, right, onDone }: { left: Fighter; right: Fighter; onDone: () => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [end, setEnd] = useState(false);
   useEffect(() => {
+    let alive = true;
+    let arena: Arena | null = null;
+    (async () => {
+      const { createArena } = await import("@/lib/arena");
+      if (!alive || !canvasRef.current) return;
+      arena = createArena(canvasRef.current);
+      arena.setFighters({ hue: hue(left.symbol), logo: left.logo }, { hue: hue(right.symbol), logo: right.logo });
+    })();
     const ann = setTimeout(() => speak(`${left.symbol}... versus... ${right.symbol}`, "high", false), 700);
     const fw = setTimeout(() => setEnd(true), 2900);
     const done = setTimeout(onDone, 3650);
-    return () => { clearTimeout(ann); clearTimeout(fw); clearTimeout(done); };
+    return () => { alive = false; arena?.dispose(); clearTimeout(ann); clearTimeout(fw); clearTimeout(done); };
   }, [left, right, onDone]);
 
   return (
     <div className="intro" onClick={onDone}>
-      <div className="intro-bg" />
+      <canvas id="intro-canvas" ref={canvasRef} />
+      <div className="intro-vignette" />
       <div className="intro-flash" />
       <div className="tape">
         <TapeCard f={left} side="left" />
@@ -112,6 +122,7 @@ function Select({ onStart }: { onStart: (l: Fighter, r: Fighter) => void }) {
   const [roster, setRoster] = useState<Fighter[]>([]);
   const [picked, setPicked] = useState<string[]>([]);
   const [page, setPage] = useState(0);
+  const [scan, setScan] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -126,6 +137,13 @@ function Select({ onStart }: { onStart: (l: Fighter, r: Fighter) => void }) {
     const id = setInterval(load, 5000);
     return () => { alive = false; clearInterval(id); };
   }, []);
+
+  // discovery counter while the first roster loads (enrichment can take a beat)
+  useEffect(() => {
+    if (roster.length > 0) return;
+    const id = setInterval(() => setScan((s) => s + Math.ceil(Math.random() * 3)), 130);
+    return () => clearInterval(id);
+  }, [roster.length]);
 
   const toggle = (sym: string) =>
     setPicked((p) => (p.includes(sym) ? p.filter((s) => s !== sym) : p.length < 2 ? [...p, sym] : [p[1], sym]));
@@ -143,7 +161,13 @@ function Select({ onStart }: { onStart: (l: Fighter, r: Fighter) => void }) {
       </div>
 
       {roster.length === 0 ? (
-        <div className="loading">reading the trenches…</div>
+        <div className="scanning">
+          <div className="scan-ring"><i /><i /><i /></div>
+          <div className="scan-title">scanning the trenches</div>
+          <div className="scan-num">{scan}<span> tokens</span></div>
+          <div className="scan-sub">indexing live Robinhood Chain order flow…</div>
+          <div className="scan-bar"><span /></div>
+        </div>
       ) : (
         <>
           <div className="mlist">
@@ -302,6 +326,7 @@ function Fight({ left, right, onExit }: { left: Fighter; right: Fighter; onExit:
   return (
     <>
       <canvas id="canvas" ref={canvasRef} />
+      <div className="arena-vignette" />
       <div className="hud">
         <div className="title">
           <h1>{left.symbol} <span className="vs">vs</span> {right.symbol}</h1>
