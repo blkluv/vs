@@ -1,108 +1,9 @@
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 export type Side = "left" | "right";
 type Act = "idle" | "lunge" | "recoil" | "stagger" | "ko";
-
-const approach = (o: any, key: string, target: number, k: number, dt: number) => {
-  o[key] += (target - o[key]) * Math.min(1, dt * k);
-};
-
-function buildFighter(color: number) {
-  const root = new THREE.Group();
-  const bodyCol = new THREE.Color(color).multiplyScalar(0.42);
-  // flat-shaded, matte, low-metal — the faceted PS1 / FF7-block look
-  const body = new THREE.MeshStandardMaterial({ color: bodyCol, roughness: 0.85, metalness: 0.06, flatShading: true });
-  const accent = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.5, roughness: 0.6, flatShading: true });
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: color, emissiveIntensity: 2.4 });
-
-  const hips = new THREE.Group();
-  hips.position.y = 1.18;
-  root.add(hips);
-
-  // chunky block torso, facing +x (thin front-to-back, wide shoulders in z)
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.62, 1.15, 1.0), body);
-  torso.position.y = 0.52;
-  torso.castShadow = true;
-  hips.add(torso);
-  const shoulders = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.32, 1.28), body); // shoulder yoke
-  shoulders.position.y = 1.0;
-  shoulders.castShadow = true;
-  hips.add(shoulders);
-  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.52, 0.82), accent); // plate on the +x front face
-  chest.position.set(0.3, 0.62, 0);
-  hips.add(chest);
-
-  // token-logo decal, clearly IN FRONT of the chest, facing the opponent (+x). Hidden until a texture loads.
-  const chestScreen = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.78, 0.78),
-    new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false }),
-  );
-  chestScreen.position.set(0.44, 0.64, 0);
-  chestScreen.rotation.y = Math.PI / 2;
-  chestScreen.renderOrder = 5;
-  chestScreen.visible = false;
-  hips.add(chestScreen);
-
-  const neck = new THREE.Group();
-  neck.position.y = 1.18;
-  hips.add(neck);
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.62, 0.62), body);
-  head.position.y = 0.34;
-  head.castShadow = true;
-  neck.add(head);
-  const eyeGeo = new THREE.BoxGeometry(0.12, 0.14, 0.06); // chunky PS1 eyes
-  const eyeA = new THREE.Mesh(eyeGeo, eyeMat);
-  eyeA.position.set(0.32, 0.38, 0.16); // eyes on the +x (forward) face
-  const eyeB = new THREE.Mesh(eyeGeo, eyeMat);
-  eyeB.position.set(0.32, 0.38, -0.16);
-  neck.add(eyeA, eyeB);
-
-  const makeArm = (zSide: number) => {
-    const sh = new THREE.Group();
-    sh.position.set(0.06, 1.0, zSide * 0.52); // shoulder on the yoke
-    hips.add(sh);
-    const upper = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.28, 0.3), body); // blocky arm along +x
-    upper.position.x = 0.36;
-    upper.castShadow = true;
-    sh.add(upper);
-    const fist = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.36), accent); // big blocky glove
-    fist.position.x = 0.82;
-    fist.castShadow = true;
-    sh.add(fist);
-    return sh;
-  };
-  const armF = makeArm(1); // lead arm
-  const armB = makeArm(-1);
-
-  const makeLeg = (xSide: number) => {
-    const hp = new THREE.Group();
-    hp.position.set(0, 0, xSide * 0.26); // legs spread along z (side-to-side when facing +x)
-    hips.add(hp);
-    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.34, 1.0, 0.38), body);
-    thigh.position.y = -0.54;
-    thigh.castShadow = true;
-    hp.add(thigh);
-    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.28, 0.44), body); // big blocky boot, points +x
-    boot.position.set(0.14, -1.05, 0);
-    boot.castShadow = true;
-    hp.add(boot);
-    return hp;
-  };
-  const legL = makeLeg(-1);
-  const legR = makeLeg(1);
-
-  // colored presence glow on the floor beneath the fighter
-  const glow = new THREE.Mesh(
-    new THREE.CircleGeometry(1.55, 44),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }),
-  );
-  glow.rotation.x = -Math.PI / 2;
-  glow.position.y = 0.02;
-  root.add(glow);
-
-  return { root, hips, neck, armF, armB, legL, legR, chestScreen, glow, mats: { body, accent, eyeMat } };
-}
-type FighterRig = ReturnType<typeof buildFighter>;
 
 export type Arena = {
   setFighters: (a: { hue: number; logo?: string | null }, b: { hue: number; logo?: string | null }) => void;
@@ -113,34 +14,35 @@ export type Arena = {
   dispose: () => void;
 };
 
-const hexFromHue = (h: number) => new THREE.Color().setHSL((((h % 360) + 360) % 360) / 360, 0.75, 0.6).getHex();
+const hexFromHue = (h: number) => new THREE.Color().setHSL((((h % 360) + 360) % 360) / 360, 0.72, 0.58).getHex();
 
 export function createArena(canvas: HTMLCanvasElement): Arena {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x07090c);
-  scene.fog = new THREE.Fog(0x07090c, 10, 24);
+  scene.fog = new THREE.Fog(0x07090c, 11, 26);
 
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
-  const camBase = new THREE.Vector3(0, 3.4, 9.4);
+  const camBase = new THREE.Vector3(0, 3.4, 9.6);
   camera.position.copy(camBase);
-  camera.lookAt(0, 1.5, 0);
+  camera.lookAt(0, 1.6, 0);
 
-  scene.add(new THREE.AmbientLight(0x8a99aa, 0.45));
-  const key = new THREE.DirectionalLight(0xffffff, 1.15);
+  scene.add(new THREE.AmbientLight(0x8a99aa, 0.55));
+  const key = new THREE.DirectionalLight(0xffffff, 1.2);
   key.position.set(3, 9, 6);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
   key.shadow.camera.near = 1;
-  key.shadow.camera.far = 32;
+  key.shadow.camera.far = 34;
   scene.add(key);
-  const rimL = new THREE.PointLight(0xc4ff3e, 0.9, 22);
+  const rimL = new THREE.PointLight(0xc4ff3e, 0.9, 24);
   rimL.position.set(-5, 3.5, 3);
-  const rimR = new THREE.PointLight(0xff4d4d, 0.8, 22);
+  const rimR = new THREE.PointLight(0xff4d4d, 0.8, 24);
   rimR.position.set(5, 3.5, 3);
   scene.add(rimL, rimR);
 
@@ -156,47 +58,127 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
   grid.position.y = 0.002;
   scene.add(grid);
 
-  const LX = -2.5;
-  const RX = 2.5;
-  const left = buildFighter(0xc4ff3e);
-  const right = buildFighter(0xff4d4d);
-  left.root.position.x = LX;
-  right.root.position.x = RX;
-  right.root.rotation.y = Math.PI; // face left
-  scene.add(left.root, right.root);
-
-  type FS = { rig: FighterRig; base: number; toCenter: number; phase: number; act: Act; t: number; power: number; flash: number; koDir: number };
-  const S: Record<Side, FS> = {
-    left: { rig: left, base: LX, toCenter: 1, phase: 0, act: "idle", t: 0, power: 0, flash: 0, koDir: -1 },
-    right: { rig: right, base: RX, toCenter: -1, phase: 1.3, act: "idle", t: 0, power: 0, flash: 0, koDir: 1 },
-  };
-  const other = (s: Side): Side => (s === "left" ? "right" : "left");
-  let shake = 0;
-  let koActive = false;
-  let hitstop = 0;
-
-  // ---- impact particles ----
-  const PMAX = 60;
-  const pGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
-  const pMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  const parts = Array.from({ length: PMAX }, () => {
-    const m = new THREE.Mesh(pGeo, pMat.clone());
+  // impact particle pool
+  const pGeo = new THREE.BoxGeometry(0.14, 0.14, 0.14);
+  const parts = Array.from({ length: 60 }, () => {
+    const m = new THREE.Mesh(pGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }));
     m.visible = false;
     scene.add(m);
     return { m, vel: new THREE.Vector3(), life: 0 };
   });
   let pIdx = 0;
-  function burst(pos: THREE.Vector3, color: number, n: number) {
-    for (let i = 0; i < n; i++) {
-      const p = parts[pIdx++ % PMAX];
-      p.m.position.copy(pos);
-      p.m.visible = true;
-      p.life = 0.4 + Math.random() * 0.3;
-      (p.m.material as THREE.MeshBasicMaterial).color.setHex(color);
-      p.m.scale.setScalar(0.5 + Math.random());
-      p.vel.set((Math.random() - 0.5) * 6, Math.random() * 5 + 1, (Math.random() - 0.5) * 6);
-    }
+
+  const LX = -2.5, RX = 2.5;
+
+  type FS = {
+    root: THREE.Group;
+    mixer: THREE.AnimationMixer;
+    actions: Record<string, THREE.AnimationAction>;
+    current?: THREE.AnimationAction;
+    mains: THREE.MeshStandardMaterial[];
+    decal: THREE.Mesh;
+    base: number;
+    toCenter: number;
+    phase: number;
+    act: Act;
+    t: number;
+    power: number;
+    flash: number;
+    xoff: number; // manual lunge/recoil offset
+  };
+  const fighters: Partial<Record<Side, FS>> = {};
+  const pending: Partial<Record<Side, { hue: number; logo?: string | null }>> = {};
+  const other = (s: Side): Side => (s === "left" ? "right" : "left");
+  let shake = 0, koActive = false, hitstop = 0;
+  const texLoader = new THREE.TextureLoader();
+
+  function playClip(f: FS, name: string, opts: { loop?: boolean; fade?: number } = {}) {
+    const a = f.actions[name];
+    if (!a) return;
+    a.reset();
+    a.setLoop(opts.loop === false ? THREE.LoopOnce : THREE.LoopRepeat, opts.loop === false ? 1 : Infinity);
+    a.clampWhenFinished = opts.loop === false;
+    a.enabled = true;
+    a.setEffectiveWeight(1);
+    if (f.current && f.current !== a) f.current.fadeOut(opts.fade ?? 0.15);
+    a.fadeIn(opts.fade ?? 0.15).play();
+    f.current = a;
   }
+
+  function applyFighterOpts(f: FS, opt: { hue: number; logo?: string | null }) {
+    const hex = hexFromHue(opt.hue);
+    for (const m of f.mains) { m.color.setHex(hex); m.emissive.setHex(hex); m.emissiveIntensity = 0.12; }
+    if (opt.logo) {
+      texLoader.load(
+        `/api/logo?url=${encodeURIComponent(opt.logo)}`,
+        (tex) => { tex.colorSpace = THREE.SRGBColorSpace; (f.decal.material as THREE.MeshBasicMaterial).map = tex; (f.decal.material as THREE.MeshBasicMaterial).needsUpdate = true; f.decal.visible = true; },
+        undefined,
+        () => { f.decal.visible = false; },
+      );
+    } else f.decal.visible = false;
+  }
+
+  // ---- load the rigged character, then build both fighters from clones ----
+  new GLTFLoader().load("/models/robot.glb", (gltf) => {
+    // normalize scale so the character is ~2.3 units tall with feet on the floor
+    const box = new THREE.Box3().setFromObject(gltf.scene);
+    const h = box.max.y - box.min.y || 1;
+    const scale = 2.3 / h;
+
+    const build = (side: Side, base: number, faceY: number, toCenter: number, phase: number): FS => {
+      const root = cloneSkinned(gltf.scene) as THREE.Group;
+      root.scale.setScalar(scale);
+      const b2 = new THREE.Box3().setFromObject(root);
+      root.position.set(base, -b2.min.y, 0);
+      root.rotation.y = faceY;
+      root.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (mesh.isMesh) {
+          mesh.castShadow = true;
+          // clone materials so recoloring one fighter doesn't affect the other
+          mesh.material = Array.isArray(mesh.material) ? mesh.material.map((m) => m.clone()) : (mesh.material as THREE.Material).clone();
+        }
+      });
+      const mains: THREE.MeshStandardMaterial[] = [];
+      root.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+        for (const m of Array.isArray(mat) ? mat : mat ? [mat] : []) {
+          if ((m as THREE.MeshStandardMaterial).isMeshStandardMaterial && /main/i.test(m.name)) mains.push(m as THREE.MeshStandardMaterial);
+        }
+      });
+
+      // logo decal on a small plane at chest height, facing the opponent
+      const decal = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.9, 0.9),
+        new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false }),
+      );
+      decal.position.set(base + toCenter * 0.55, 1.5, 0);
+      decal.rotation.y = toCenter > 0 ? Math.PI / 2 : -Math.PI / 2;
+      decal.renderOrder = 5;
+      decal.visible = false;
+      scene.add(decal);
+
+      const glow = new THREE.Mesh(new THREE.CircleGeometry(1.6, 40), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false }));
+      glow.rotation.x = -Math.PI / 2;
+      glow.position.set(base, 0.02, 0);
+      scene.add(glow);
+
+      scene.add(root);
+      const mixer = new THREE.AnimationMixer(root);
+      const actions: Record<string, THREE.AnimationAction> = {};
+      for (const clip of gltf.animations) actions[clip.name] = mixer.clipAction(clip);
+
+      const f: FS = { root, mixer, actions, mains, decal, base, toCenter, phase, act: "idle", t: 0, power: 0, flash: 0, xoff: 0 };
+      playClip(f, "Idle");
+      return f;
+    };
+
+    fighters.left = build("left", LX, Math.PI / 2, 1, 0);
+    fighters.right = build("right", RX, -Math.PI / 2, -1, 1.3);
+    if (pending.left) applyFighterOpts(fighters.left, pending.left);
+    if (pending.right) applyFighterOpts(fighters.right, pending.right);
+  });
 
   function resize() {
     const w = canvas.clientWidth || window.innerWidth;
@@ -208,84 +190,29 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
   resize();
   window.addEventListener("resize", resize);
 
-  function pose(s: FS, dt: number, time: number) {
-    const F = s.rig;
-    const K = 16;
-    // guard defaults
-    let rootX = s.base, rootY = 0, rootRz = 0;
-    let hipsY = 1.18 + Math.sin(time * 3 + s.phase) * 0.045;
-    let hipsRy = Math.sin(time * 1.4 + s.phase) * 0.05;
-    let hipsRz = 0;
-    let neckRx = Math.sin(time * 2 + s.phase) * 0.03, neckRz = 0;
-    let aFz = 0.66, aFy = -0.38, aBz = 0.86, aBy = 0.32;
-    let legRz = 0.14, legLz = -0.14; // staggered boxing stance (forward/back along facing)
-
-    if (!koActive || s.act === "ko") s.t += dt;
-
-    if (s.act === "lunge") {
-      const p = Math.min(s.t / 0.32, 1), pu = Math.sin(p * Math.PI);
-      rootX = s.base + s.toCenter * pu * (1.15 + s.power * 0.55);
-      hipsRy += pu * 0.42;
-      aFz = 0.66 - pu * 0.82;
-      aFy = -0.38 - pu * 0.14;
-      aBz = 0.86 + pu * 0.15;
-      legRz = 0.14 + pu * 0.5;
-      if (p >= 1) { s.act = "idle"; s.t = 0; }
-    } else if (s.act === "recoil") {
-      const p = Math.min(s.t / 0.34, 1), ki = Math.sin(p * Math.PI);
-      rootX = s.base - s.toCenter * ki * (0.5 + s.power * 0.45);
-      neckRz = ki * 0.55; neckRx = -ki * 0.35;
-      hipsRy = -ki * 0.22;
-      aFz = 0.66 + ki * 0.5; aBz = 0.86 + ki * 0.3;
-      legLz = -0.14 - ki * 0.32;
-      if (p >= 1) { s.act = "idle"; s.t = 0; }
-    } else if (s.act === "stagger") {
-      // sell = drop the guard, open up (exposed) — a slow off-balance opening, not a hit jolt
-      const p = Math.min(s.t / 0.6, 1), w = Math.sin(p * Math.PI);
-      rootRz = -s.toCenter * w * 0.08;
-      aFz = 0.66 - w * 0.72; aFy = -0.38 + w * 0.3;
-      aBz = 0.86 - w * 0.55;
-      neckRx = -w * 0.12;
-      if (p >= 1) { s.act = "idle"; s.t = 0; }
-    } else if (s.act === "ko") {
-      const p = Math.min(s.t / 1.15, 1);
-      rootRz = s.koDir * p * 1.5;
-      rootY = -p * 0.55;
-      rootX = s.base + s.toCenter * p * 0.4;
-      legRz = 0.14 + p * 0.5; legLz = -0.14 - p * 0.5;
-      aFz = 0.66 + p * 0.4; aBz = 0.86 + p * 0.4;
-      neckRx = p * 0.45;
-    }
-
-    approach(F.root.position, "x", rootX, K, dt);
-    approach(F.root.position, "y", rootY, K, dt);
-    approach(F.root.rotation, "z", rootRz, K, dt);
-    approach(F.hips.position, "y", hipsY, K, dt);
-    approach(F.hips.rotation, "y", hipsRy, K, dt);
-    approach(F.hips.rotation, "z", hipsRz, K, dt);
-    approach(F.neck.rotation, "x", neckRx, K, dt);
-    approach(F.neck.rotation, "z", neckRz, K, dt);
-    approach(F.armF.rotation, "z", aFz, K, dt);
-    approach(F.armF.rotation, "y", aFy, K, dt);
-    approach(F.armB.rotation, "z", aBz, K, dt);
-    approach(F.armB.rotation, "y", aBy, K, dt);
-    approach(F.legR.rotation, "z", legRz, K, dt);
-    approach(F.legL.rotation, "z", legLz, K, dt);
-
-    if (s.flash > 0) s.flash = Math.max(0, s.flash - dt * 3.2);
-    F.mats.accent.emissiveIntensity = 0.4 + s.flash * 2.6;
-  }
-
   const clock = new THREE.Clock();
   let raf = 0;
   function frame() {
     raf = requestAnimationFrame(frame);
     let dt = Math.min(clock.getDelta(), 0.05);
     const time = clock.elapsedTime;
-    if (hitstop > 0) { hitstop -= dt; dt *= 0.12; } // freeze frames on big hits
+    if (hitstop > 0) { hitstop -= dt; dt *= 0.12; }
 
-    pose(S.left, dt, time);
-    pose(S.right, dt, time);
+    for (const side of ["left", "right"] as Side[]) {
+      const f = fighters[side];
+      if (!f) continue;
+      f.mixer.update(dt);
+
+      // manual root offset for lunge/recoil (blended on top of the baked clip)
+      let targetX = 0;
+      if (f.act === "lunge") { f.t += dt; const p = Math.min(f.t / 0.4, 1); targetX = f.toCenter * Math.sin(p * Math.PI) * (1.0 + f.power * 0.5); if (p >= 1) { f.act = "idle"; f.t = 0; } }
+      else if (f.act === "recoil") { f.t += dt; const p = Math.min(f.t / 0.34, 1); targetX = -f.toCenter * Math.sin(p * Math.PI) * (0.5 + f.power * 0.4); if (p >= 1) { f.act = "idle"; f.t = 0; } }
+      else if (f.act === "stagger") { f.t += dt; if (f.t > 0.5) { f.act = "idle"; f.t = 0; } }
+      f.xoff += (targetX - f.xoff) * Math.min(1, dt * 16);
+      f.root.position.x = f.base + f.xoff;
+
+      if (f.flash > 0) { f.flash = Math.max(0, f.flash - dt * 3.2); for (const m of f.mains) m.emissiveIntensity = 0.12 + f.flash * 1.6; }
+    }
 
     for (const p of parts) {
       if (p.life <= 0) { if (p.m.visible) p.m.visible = false; continue; }
@@ -293,13 +220,11 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
       p.vel.y -= 14 * dt;
       p.m.position.addScaledVector(p.vel, dt);
       p.m.scale.multiplyScalar(1 - dt * 3);
-      if (p.m.position.y < 0.05 || p.life <= 0) p.m.visible = false;
+      if (p.m.position.y < 0.05) p.m.visible = false;
     }
 
-    if (shake > 0) {
-      shake = Math.max(0, shake - dt * 4);
-      camera.position.set(camBase.x + (Math.random() - 0.5) * shake, camBase.y + (Math.random() - 0.5) * shake, camBase.z);
-    } else camera.position.lerp(camBase, 0.2);
+    if (shake > 0) { shake = Math.max(0, shake - dt * 4); camera.position.set(camBase.x + (Math.random() - 0.5) * shake, camBase.y + (Math.random() - 0.5) * shake, camBase.z); }
+    else camera.position.lerp(camBase, 0.2);
     rimL.intensity = 0.7 + Math.sin(time * 3) * 0.15;
     rimR.intensity = 0.6 + Math.sin(time * 3 + 1) * 0.15;
 
@@ -307,88 +232,46 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
   }
   frame();
 
-  const contactPoint = (defender: Side) => {
-    const v = new THREE.Vector3();
-    S[defender].rig.hips.getWorldPosition(v);
-    v.y += 0.7;
-    return v;
-  };
-
   return {
     setFighters(a, b) {
-      const loader = new THREE.TextureLoader();
-      const apply = (F: FighterRig, opt: { hue: number; logo?: string | null }) => {
-        const hex = hexFromHue(opt.hue);
-        F.mats.accent.color.setHex(hex);
-        F.mats.accent.emissive.setHex(hex);
-        F.mats.body.color.copy(new THREE.Color(hex).multiplyScalar(0.34));
-        F.mats.eyeMat.emissive.setHex(hex);
-        (F.glow.material as THREE.MeshBasicMaterial).color.setHex(hex);
-        if (opt.logo) {
-          loader.load(
-            `/api/logo?url=${encodeURIComponent(opt.logo)}`,
-            (tex) => {
-              tex.colorSpace = THREE.SRGBColorSpace;
-              const m = F.chestScreen.material as THREE.MeshBasicMaterial;
-              m.map = tex;
-              m.needsUpdate = true;
-              F.chestScreen.visible = true;
-            },
-            undefined,
-            () => { F.chestScreen.visible = false; }, // load/CORS failure -> color only
-          );
-        } else {
-          F.chestScreen.visible = false;
-        }
-      };
-      apply(left, a);
-      apply(right, b);
+      pending.left = a; pending.right = b;
+      if (fighters.left) applyFighterOpts(fighters.left, a);
+      if (fighters.right) applyFighterOpts(fighters.right, b);
     },
     strike(attacker, power, crit) {
       if (koActive) return;
-      const s = S[attacker];
-      if (s.act === "ko") return;
-      s.act = "lunge";
-      s.t = 0;
-      s.power = Math.min(power, 1.4);
+      const f = fighters[attacker];
+      if (!f || f.act === "ko") return;
+      f.act = "lunge"; f.t = 0; f.power = Math.min(power, 1.4);
+      playClip(f, "Punch", { loop: false, fade: 0.08 });
+      // return to idle after the punch clip
+      window.setTimeout(() => { if (f.act !== "ko") playClip(f, "Idle", { fade: 0.2 }); }, 550);
       window.setTimeout(() => {
         if (koActive) return;
-        const o = S[other(attacker)];
-        if (o.act === "ko") return;
-        o.act = "recoil";
-        o.t = 0;
-        o.power = Math.min(power, 1.4) * (crit ? 1.4 : 1);
-        o.flash = crit ? 1.5 : 1;
+        const o = fighters[other(attacker)];
+        if (!o || o.act === "ko") return;
+        o.act = "recoil"; o.t = 0; o.power = Math.min(power, 1.4) * (crit ? 1.4 : 1); o.flash = crit ? 1.5 : 1;
         shake = Math.min((crit ? 0.6 : 0.32) + power * 0.28, 1.05);
         if (crit) hitstop = 0.09;
-        const col = (o.rig.mats.accent.color as THREE.Color).getHex();
-        burst(contactPoint(other(attacker)), crit ? 0xffffff : col, crit ? 16 : 9);
-      }, 120);
+        burst(o.root.position.x, 1.4, crit ? 0xffffff : 0xffddaa, crit ? 16 : 9);
+      }, 130);
     },
-    stagger(who, power) {
+    stagger(who) {
       if (koActive) return;
-      const s = S[who];
-      if (s.act === "ko") return;
-      s.act = "stagger";
-      s.t = 0;
-      s.power = Math.min(power * 0.7, 0.9);
-      // no flash — a sell is "guard dropped / exposed", NOT a hit (hits flash + recoil)
+      const f = fighters[who];
+      if (!f || f.act === "ko") return;
+      f.act = "stagger"; f.t = 0; // exposed; no flash, no baked hit
     },
     ko(loser) {
       koActive = true;
-      S[loser].act = "ko";
-      S[loser].t = 0;
-      shake = 1.15;
-      hitstop = 0.12;
-      burst(contactPoint(loser), 0xffffff, 22);
+      const f = fighters[loser];
+      if (f) { f.act = "ko"; playClip(f, "Death", { loop: false, fade: 0.15 }); }
+      shake = 1.15; hitstop = 0.12;
+      if (f) burst(f.root.position.x, 1.2, 0xffffff, 22);
     },
     reset() {
       koActive = false;
-      for (const k of ["left", "right"] as Side[]) {
-        S[k].act = "idle";
-        S[k].t = 0;
-        S[k].flash = 0;
-      }
+      for (const side of ["left", "right"] as Side[]) { const f = fighters[side]; if (f) { f.act = "idle"; f.t = 0; f.flash = 0; f.xoff = 0; playClip(f, "Idle", { fade: 0.2 }); } }
     },
     dispose() {
       cancelAnimationFrame(raf);
@@ -396,4 +279,17 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
       renderer.dispose();
     },
   };
+
+  // ---- impact particles ----
+  function burst(x: number, y: number, color: number, n: number) {
+    for (let i = 0; i < n; i++) {
+      const p = parts[pIdx++ % parts.length];
+      p.m.position.set(x, y, 0);
+      p.m.visible = true;
+      p.life = 0.4 + Math.random() * 0.3;
+      (p.m.material as THREE.MeshBasicMaterial).color.setHex(color);
+      p.m.scale.setScalar(0.5 + Math.random());
+      p.vel.set((Math.random() - 0.5) * 6, Math.random() * 5 + 1, (Math.random() - 0.5) * 6);
+    }
+  }
 }
