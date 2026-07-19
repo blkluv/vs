@@ -303,7 +303,10 @@ function Fight({ left, right, onExit }: { left: Fighter; right: Fighter; onExit:
       ticker = setInterval(() => {
         const st = stateRef.current!;
         const now = Date.now();
+        const prevPhase = st.phase;
         applyEffects(tick(st, now, 100), now);
+        // a KO'd fighter fell during the round-end/intro beat — revive both as the next round begins
+        if (prevPhase === "intro" && st.phase === "fight") arena.reset();
         repaint();
       }, 100);
     })();
@@ -333,6 +336,7 @@ function Fight({ left, right, onExit }: { left: Fighter; right: Fighter; onExit:
           <div className="sub">round {st?.round ?? 1} · {timeLeft !== null ? `${timeLeft}s` : "—"} · buys strike · sells expose</div>
         </div>
 
+        <button className="exit" onClick={onExit}>← exit</button>
         {voiceAvailable() && (
           <button className="mute" onClick={() => { const m = !muted; setMuted(m); mutedRef.current = m; if (m) window.speechSynthesis.cancel(); }}>
             {muted ? "🔇 commentary" : "🔊 commentary"}
