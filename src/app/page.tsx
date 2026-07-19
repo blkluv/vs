@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Arena, Side } from "@/lib/arena";
+import type { Arena } from "@/lib/arena";
 import { createMatch, applyFlow, tick, CFG, type MatchState } from "@/lib/fight";
+import { Commentator, speak, voiceAvailable, type Callout } from "@/lib/commentator";
 
-type FlowEvent = { symbol: string; side: "buy" | "sell"; quoteValue: number };
-type Trending = { symbol: string; count: number; buys: number; sells: number };
+type FlowEvent = { symbol: string; side: "buy" | "sell"; amount: number; quoteValue: number };
+type Fighter = { symbol: string; count: number; buys: number; sells: number; logo: string | null; mcap: number | null; supply: number | null };
 
 const LIME = "#c4ff3e";
 const RED = "#ff4d4d";
@@ -16,17 +17,18 @@ function hue(sym: string) {
   return h;
 }
 const cardColor = (sym: string) => `hsl(${hue(sym)} 80% 60%)`;
+const fmtCap = (n: number | null) => (n == null ? "—" : n >= 1e9 ? `$${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}K` : `$${n.toFixed(0)}`);
 
 export default function Pit() {
-  const [match, setMatch] = useState<{ left: string; right: string } | null>(null);
+  const [match, setMatch] = useState<{ left: Fighter; right: Fighter } | null>(null);
   if (!match) return <Select onStart={(l, r) => setMatch({ left: l, right: r })} />;
-  return <Fight left={match.left} right={match.right} onExit={() => setMatch(null)} key={`${match.left}-${match.right}`} />;
+  return <Fight left={match.left} right={match.right} onExit={() => setMatch(null)} key={`${match.left.symbol}-${match.right.symbol}`} />;
 }
 
 /* ---------------- selection screen ---------------- */
 
-function Select({ onStart }: { onStart: (l: string, r: string) => void }) {
-  const [roster, setRoster] = useState<Trending[]>([]);
+function Select({ onStart }: { onStart: (l: Fighter, r: Fighter) => void }) {
+  const [roster, setRoster] = useState<Fighter[]>([]);
   const [picked, setPicked] = useState<string[]>([]);
 
   useEffect(() => {
@@ -39,12 +41,14 @@ function Select({ onStart }: { onStart: (l: string, r: string) => void }) {
       } catch {}
     };
     load();
-    const id = setInterval(load, 4000);
+    const id = setInterval(load, 5000);
     return () => { alive = false; clearInterval(id); };
   }, []);
 
   const toggle = (sym: string) =>
     setPicked((p) => (p.includes(sym) ? p.filter((s) => s !== sym) : p.length < 2 ? [...p, sym] : [p[1], sym]));
+
+  const bySym = (s: string) => roster.find((t) => t.symbol === s)!;
 
   return (
     <div className="select">
@@ -61,15 +65,18 @@ function Select({ onStart }: { onStart: (l: string, r: string) => void }) {
           const c = cardColor(t.symbol);
           return (
             <button key={t.symbol} className={`card ${sel ? "sel" : ""}`} onClick={() => toggle(t.symbol)} style={{ ["--c" as string]: c }}>
-              <div className="emblem" style={{ background: `radial-gradient(circle at 35% 30%, ${c}, #0a0e0a 78%)` }}>
-                {t.symbol.slice(0, 2).toUpperCase()}
-              </div>
+              {t.logo ? (
+                <img className="emblem-img" src={t.logo} alt="" />
+              ) : (
+                <div className="emblem" style={{ background: `radial-gradient(circle at 35% 30%, ${c}, #0a0e0a 78%)` }}>{t.symbol.slice(0, 2).toUpperCase()}</div>
+              )}
               <div className="c-sym">{t.symbol}</div>
+              <div className="c-cap">{fmtCap(t.mcap)}</div>
               <div className="c-bar">
                 <span className="c-buy" style={{ width: `${(t.buys / total) * 100}%` }} />
                 <span className="c-sell" style={{ width: `${(t.sells / total) * 100}%` }} />
               </div>
-              <div className="c-stat"><b className="buy">{t.buys}▲</b> <b className="sell">{t.sells}▼</b> · {t.count} trades</div>
+              <div className="c-stat"><b className="buy">{t.buys}▲</b> <b className="sell">{t.sells}▼</b></div>
               {sel && <div className="c-pick">{picked.indexOf(t.symbol) === 0 ? "① left" : "② right"}</div>}
             </button>
           );
@@ -77,7 +84,7 @@ function Select({ onStart }: { onStart: (l: string, r: string) => void }) {
       </div>
 
       <div className="s-foot">
-        <button className="enter" disabled={picked.length < 2} onClick={() => onStart(picked[0], picked[1])}>
+        <button className="enter" disabled={picked.length < 2} onClick={() => onStart(bySym(picked[0]), bySym(picked[1]))}>
           {picked.length < 2 ? `pick ${2 - picked.length} more` : `⚔ ${picked[0]}  vs  ${picked[1]}`}
         </button>
         <div className="hint">no token · pure spectacle · by jumpbox</div>
@@ -88,12 +95,16 @@ function Select({ onStart }: { onStart: (l: string, r: string) => void }) {
 
 /* ---------------- fight screen ---------------- */
 
-function Fight({ left, right, onExit }: { left: string; right: string; onExit: () => void }) {
+function Fight({ left, right, onExit }: { left: Fighter; right: Fighter; onExit: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const arenaRef = useRef<Arena | null>(null);
   const stateRef = useRef<MatchState | null>(null);
   const queue = useRef<FlowEvent[]>([]);
   const cursor = useRef<string | undefined>(undefined);
+  const commentator = useRef(new Commentator());
+  const mutedRef = useRef(false);
+  const [muted, setMuted] = useState(false);
+  const [callout, setCallout] = useState<Callout | null>(null);
   const [, force] = useState(0);
   const repaint = useCallback(() => force((n) => (n + 1) % 1e6), []);
 
@@ -108,13 +119,36 @@ function Fight({ left, right, onExit }: { left: string; right: string; onExit: (
       if (!alive || !canvasRef.current) return;
       const arena = createArena(canvasRef.current);
       arenaRef.current = arena;
-      stateRef.current = createMatch(left, right, Date.now());
+      stateRef.current = createMatch(left.symbol, right.symbol, Date.now(), { left: left.supply, right: right.supply });
 
-      const applyEffects = (fx: ReturnType<typeof applyFlow>) => {
+      const c = commentator.current;
+      const symOf = (side: "left" | "right") => (side === "left" ? left.symbol : right.symbol);
+      const fire = (line: ReturnType<Commentator["say"]>) => {
+        if (!line) return;
+        setCallout(line);
+        speak(line.text, line.intensity, mutedRef.current);
+      };
+
+      const applyEffects = (fx: ReturnType<typeof applyFlow>, now: number) => {
         for (const e of fx) {
-          if (e.type === "strike") arena.strike(e.side, e.blocked ? e.power * 0.35 : e.power, e.crit);
-          else if (e.type === "stagger") arena.stagger(e.side, 0.8);
-          else if (e.type === "ko") arena.ko(e.loser);
+          if (e.type === "strike") {
+            arena.strike(e.side, e.blocked ? e.power * 0.35 : e.power, e.crit);
+            const a = symOf(e.side), b = symOf(e.side === "left" ? "right" : "left");
+            if (e.blocked) fire(c.say(now, "block", { a, b }));
+            else if (e.crit) fire(c.say(now, "crit", { a, b }));
+            else if (e.combo >= 3) fire(c.say(now, "combo", { n: e.combo + 1, a, b }));
+            else if (e.power > 2.4) fire(c.say(now, "bigStrike", { a, b }));
+            else fire(c.say(now, "strike", { a, b }));
+          } else if (e.type === "stagger") {
+            arena.stagger(e.side, 0.8);
+          } else if (e.type === "expose") {
+            fire(c.say(now, "expose", { who: symOf(e.side) }));
+          } else if (e.type === "ko") {
+            arena.ko(e.loser);
+            fire(c.say(now, "ko", { who: symOf(e.loser), winner: symOf(e.loser === "left" ? "right" : "left") }));
+          } else if (e.type === "roundBanner" || e.type === "matchBanner") {
+            fire(c.say(now, "round", { banner: e.text }));
+          }
         }
       };
 
@@ -125,9 +159,7 @@ function Fight({ left, right, onExit }: { left: string; right: string; onExit: (
           const d = await res.json();
           if (!res.ok) return;
           cursor.current = d.latestBlock;
-          for (const e of d.events as FlowEvent[]) {
-            if (e.symbol === left || e.symbol === right) queue.current.push(e);
-          }
+          for (const e of d.events as FlowEvent[]) if (e.symbol === left.symbol || e.symbol === right.symbol) queue.current.push(e);
           if (queue.current.length > 60) queue.current = queue.current.slice(-60);
         } catch {}
       };
@@ -137,12 +169,14 @@ function Fight({ left, right, onExit }: { left: string; right: string; onExit: (
       drain = setInterval(() => {
         const st = stateRef.current!;
         const e = queue.current.shift();
-        if (e && st.phase === "fight") applyEffects(applyFlow(st, e, Date.now()));
+        const now = Date.now();
+        if (e && st.phase === "fight") applyEffects(applyFlow(st, e, now), now);
         repaint();
       }, 360);
       ticker = setInterval(() => {
         const st = stateRef.current!;
-        applyEffects(tick(st, Date.now(), 100));
+        const now = Date.now();
+        applyEffects(tick(st, now, 100), now);
         repaint();
       }, 100);
     })();
@@ -153,6 +187,7 @@ function Fight({ left, right, onExit }: { left: string; right: string; onExit: (
       clearInterval(drain);
       clearInterval(ticker);
       arenaRef.current?.dispose();
+      if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
     };
   }, [left, right, repaint]);
 
@@ -166,14 +201,20 @@ function Fight({ left, right, onExit }: { left: string; right: string; onExit: (
       <canvas id="canvas" ref={canvasRef} />
       <div className="hud">
         <div className="title">
-          <h1>{left} <span className="vs">vs</span> {right}</h1>
+          <h1>{left.symbol} <span className="vs">vs</span> {right.symbol}</h1>
           <div className="sub">round {st?.round ?? 1} · {timeLeft !== null ? `${timeLeft}s` : "—"} · buys strike · sells expose</div>
         </div>
+
+        {voiceAvailable() && (
+          <button className="mute" onClick={() => { const m = !muted; setMuted(m); mutedRef.current = m; if (m) window.speechSynthesis.cancel(); }}>
+            {muted ? "🔇 commentary" : "🔊 commentary"}
+          </button>
+        )}
 
         <div className="fighters">
           <div className="fighter">
             <div className="fname" style={{ color: LIME }}>
-              {left} <span className="pips">{pips(st?.left.roundsWon ?? 0).map((w, i) => <i key={i} className={w ? "on" : ""} />)}</span>
+              {left.symbol} <span className="pips">{pips(st?.left.roundsWon ?? 0).map((w, i) => <i key={i} className={w ? "on" : ""} />)}</span>
             </div>
             <div className="hpwrap"><div className="hp" style={{ width: pct(st?.left.hp ?? CFG.HP_MAX), background: LIME }} /></div>
             <div className="guardwrap"><div className="guard" style={{ width: `${st?.left.guard ?? 100}%` }} /></div>
@@ -181,7 +222,7 @@ function Fight({ left, right, onExit }: { left: string; right: string; onExit: (
           </div>
           <div className="fighter r">
             <div className="fname" style={{ color: RED }}>
-              <span className="pips r">{pips(st?.right.roundsWon ?? 0).map((w, i) => <i key={i} className={w ? "on" : ""} />)}</span> {right}
+              <span className="pips r">{pips(st?.right.roundsWon ?? 0).map((w, i) => <i key={i} className={w ? "on" : ""} />)}</span> {right.symbol}
             </div>
             <div className="hpwrap"><div className="hp r" style={{ width: pct(st?.right.hp ?? CFG.HP_MAX), background: RED, marginLeft: "auto" }} /></div>
             <div className="guardwrap"><div className="guard r" style={{ width: `${st?.right.guard ?? 100}%`, marginLeft: "auto" }} /></div>
@@ -189,12 +230,11 @@ function Fight({ left, right, onExit }: { left: string; right: string; onExit: (
           </div>
         </div>
 
+        {callout && <div className={`callout ${callout.intensity}`} key={callout.id}>{callout.text}</div>}
         <div className={`round ${st?.banner ? "show" : ""}`}>{st?.banner}</div>
 
         {st?.phase === "matchEnd" && (
-          <div className="endbtns">
-            <button onClick={onExit}>← new match</button>
-          </div>
+          <div className="endbtns"><button onClick={onExit}>← new match</button></div>
         )}
         <div className="foot">live on Robinhood Chain · by jumpbox</div>
       </div>
