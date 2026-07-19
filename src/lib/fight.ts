@@ -160,11 +160,11 @@ export function applyFlow(
     const blocked = !exposed && gf >= CFG.BLOCK_AT;
     effects.push({ type: "strike", side, power: weight, crit, blocked, combo: me.combo });
   } else {
-    // selling me drains my guard (scaled by heft) and exposes me; small self chip (can't KO)
+    // selling me drains my guard and EXPOSES me (opponent's next strike lands clean/crit).
+    // A sell never damages HP directly — all HP loss comes from the opponent striking.
     me.guard = Math.max(0, me.guard - CFG.GUARD_ON_SELL * weight);
     me.exposedUntil = now + CFG.EXPOSE_MS;
     me.combo = 0;
-    me.hp = Math.max(1, me.hp - CFG.SELL_CHIP * weight);
     effects.push({ type: "stagger", side });
     effects.push({ type: "expose", side });
   }
