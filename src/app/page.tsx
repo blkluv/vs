@@ -20,6 +20,15 @@ const cardColor = (sym: string) => `hsl(${hue(sym)} 80% 60%)`;
 const fmtCap = (n: number | null) => (n == null ? "—" : n >= 1e9 ? `$${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}K` : `$${n.toFixed(0)}`);
 const fmtAmt = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : n.toFixed(0));
 
+function LogoBadge({ f }: { f: Fighter }) {
+  const c = cardColor(f.symbol);
+  return f.logo ? (
+    <img className="hp-logo" src={f.logo} alt="" />
+  ) : (
+    <span className="hp-logo hp-logo-fb" style={{ background: `radial-gradient(circle at 35% 30%, ${c}, #0a0e0a 80%)` }}>{f.symbol.slice(0, 2).toUpperCase()}</span>
+  );
+}
+
 export default function Pit() {
   const [phase, setPhase] = useState<"select" | "intro" | "fight">("select");
   const [f, setF] = useState<{ left: Fighter; right: Fighter } | null>(null);
@@ -308,7 +317,7 @@ function Fight({ left, right, onExit }: { left: Fighter; right: Fighter; onExit:
         <div className="fighters">
           <div className="fighter">
             <div className="fname" style={{ color: LIME }}>
-              {left.symbol} <span className="pips">{pips(st?.left.roundsWon ?? 0).map((w, i) => <i key={i} className={w ? "on" : ""} />)}</span>
+              <LogoBadge f={left} />{left.symbol} <span className="pips">{pips(st?.left.roundsWon ?? 0).map((w, i) => <i key={i} className={w ? "on" : ""} />)}</span>
             </div>
             <div className="hpwrap"><div className="hp" style={{ width: pct(st?.left.hp ?? CFG.HP_MAX), background: LIME }} /></div>
             <div className="guardwrap"><div className="guard" style={{ width: `${st?.left.guard ?? 100}%` }} /></div>
@@ -321,7 +330,7 @@ function Fight({ left, right, onExit }: { left: Fighter; right: Fighter; onExit:
           </div>
           <div className="fighter r">
             <div className="fname" style={{ color: RED }}>
-              <span className="pips r">{pips(st?.right.roundsWon ?? 0).map((w, i) => <i key={i} className={w ? "on" : ""} />)}</span> {right.symbol}
+              <span className="pips r">{pips(st?.right.roundsWon ?? 0).map((w, i) => <i key={i} className={w ? "on" : ""} />)}</span> {right.symbol}<LogoBadge f={right} />
             </div>
             <div className="hpwrap"><div className="hp r" style={{ width: pct(st?.right.hp ?? CFG.HP_MAX), background: RED, marginLeft: "auto" }} /></div>
             <div className="guardwrap"><div className="guard r" style={{ width: `${st?.right.guard ?? 100}%`, marginLeft: "auto" }} /></div>

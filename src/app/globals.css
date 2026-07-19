@@ -33,6 +33,9 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); f
 .round.show { opacity: 1; }
 .foot { position: absolute; bottom: 42px; left: 0; right: 0; text-align: center; font-size: 10px; color: #3a424a; letter-spacing: .18em; text-transform: uppercase; }
 .title .vs { color: #4a525a; font-weight: 400; }
+.hp-logo { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin: 0 8px -6px; border: 1px solid rgba(255,255,255,.16); background: #0a0e0a; }
+.fighter.r .hp-logo { margin: 0 0 -6px 8px; }
+.hp-logo-fb { display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; color: #07090c; }
 
 /* guard bar + pips + combo */
 .guardwrap { height: 5px; border: 1px solid #1a2230; background: #0a0f0c; margin-top: 4px; overflow: hidden; }

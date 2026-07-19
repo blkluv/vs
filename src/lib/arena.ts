@@ -18,12 +18,13 @@ function buildFighter(color: number) {
   hips.position.y = 1.05;
   root.add(hips);
 
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.15, 0.6), body);
+  // faces +x (toward opponent): thin front-to-back (x), wide shoulder-to-shoulder (z)
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.15, 0.95), body);
   torso.position.y = 0.55;
   torso.castShadow = true;
   hips.add(torso);
-  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.44, 0.62), accent);
-  chest.position.set(0, 0.72, 0.02);
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.46, 0.74), accent); // plate on the +x front face
+  chest.position.set(0.28, 0.72, 0);
   hips.add(chest);
 
   const neck = new THREE.Group();
@@ -59,14 +60,14 @@ function buildFighter(color: number) {
 
   const makeLeg = (xSide: number) => {
     const hp = new THREE.Group();
-    hp.position.set(xSide * 0.22, 0, 0);
+    hp.position.set(0, 0, xSide * 0.24); // legs spread along z (side-to-side when facing +x)
     hips.add(hp);
     const l = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.13, 0.98, 10), body);
     l.position.y = -0.52;
     l.castShadow = true;
     hp.add(l);
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.16, 0.52), body);
-    foot.position.set(0, -1.02, 0.12);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.16, 0.3), body); // foot points +x (forward)
+    foot.position.set(0.14, -1.02, 0);
     hp.add(foot);
     return hp;
   };
@@ -191,7 +192,7 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
     let hipsRz = 0;
     let neckRx = Math.sin(time * 2 + s.phase) * 0.03, neckRz = 0;
     let aFz = 0.66, aFy = -0.38, aBz = 0.86, aBy = 0.32;
-    let legRx = 0, legLx = 0;
+    let legRz = 0.14, legLz = -0.14; // staggered boxing stance (forward/back along facing)
 
     if (!koActive || s.act === "ko") s.t += dt;
 
@@ -202,7 +203,7 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
       aFz = 0.66 - pu * 0.82;
       aFy = -0.38 - pu * 0.14;
       aBz = 0.86 + pu * 0.15;
-      legRx = -pu * 0.42;
+      legRz = 0.14 + pu * 0.5;
       if (p >= 1) { s.act = "idle"; s.t = 0; }
     } else if (s.act === "recoil") {
       const p = Math.min(s.t / 0.34, 1), ki = Math.sin(p * Math.PI);
@@ -210,7 +211,7 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
       neckRz = ki * 0.55; neckRx = -ki * 0.35;
       hipsRy = -ki * 0.22;
       aFz = 0.66 + ki * 0.5; aBz = 0.86 + ki * 0.3;
-      legLx = ki * 0.32;
+      legLz = -0.14 - ki * 0.32;
       if (p >= 1) { s.act = "idle"; s.t = 0; }
     } else if (s.act === "stagger") {
       const p = Math.min(s.t / 0.55, 1), w = Math.sin(p * Math.PI);
@@ -224,7 +225,7 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
       rootRz = s.koDir * p * 1.5;
       rootY = -p * 0.55;
       rootX = s.base + s.toCenter * p * 0.4;
-      legRx = p * 0.5; legLx = p * 0.5;
+      legRz = 0.14 + p * 0.5; legLz = -0.14 - p * 0.5;
       aFz = 0.66 + p * 0.4; aBz = 0.86 + p * 0.4;
       neckRx = p * 0.45;
     }
@@ -241,8 +242,8 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
     approach(F.armF.rotation, "y", aFy, K, dt);
     approach(F.armB.rotation, "z", aBz, K, dt);
     approach(F.armB.rotation, "y", aBy, K, dt);
-    approach(F.legR.rotation, "x", legRx, K, dt);
-    approach(F.legL.rotation, "x", legLx, K, dt);
+    approach(F.legR.rotation, "z", legRz, K, dt);
+    approach(F.legL.rotation, "z", legLz, K, dt);
 
     if (s.flash > 0) s.flash = Math.max(0, s.flash - dt * 3.2);
     F.mats.accent.emissiveIntensity = 0.4 + s.flash * 2.6;
