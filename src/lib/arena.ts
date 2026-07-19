@@ -9,59 +9,65 @@ const approach = (o: any, key: string, target: number, k: number, dt: number) =>
 
 function buildFighter(color: number) {
   const root = new THREE.Group();
-  const bodyCol = new THREE.Color(color).multiplyScalar(0.34);
-  const body = new THREE.MeshStandardMaterial({ color: bodyCol, roughness: 0.5, metalness: 0.35 });
-  const accent = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.4, roughness: 0.4 });
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: color, emissiveIntensity: 2.2 });
+  const bodyCol = new THREE.Color(color).multiplyScalar(0.42);
+  // flat-shaded, matte, low-metal — the faceted PS1 / FF7-block look
+  const body = new THREE.MeshStandardMaterial({ color: bodyCol, roughness: 0.85, metalness: 0.06, flatShading: true });
+  const accent = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.5, roughness: 0.6, flatShading: true });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: color, emissiveIntensity: 2.4 });
 
   const hips = new THREE.Group();
-  hips.position.y = 1.05;
+  hips.position.y = 1.18;
   root.add(hips);
 
-  // faces +x (toward opponent): thin front-to-back (x), wide shoulder-to-shoulder (z)
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.15, 0.95), body);
-  torso.position.y = 0.55;
+  // chunky block torso, facing +x (thin front-to-back, wide shoulders in z)
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.62, 1.15, 1.0), body);
+  torso.position.y = 0.52;
   torso.castShadow = true;
   hips.add(torso);
-  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.46, 0.74), accent); // plate on the +x front face
-  chest.position.set(0.28, 0.72, 0);
+  const shoulders = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.32, 1.28), body); // shoulder yoke
+  shoulders.position.y = 1.0;
+  shoulders.castShadow = true;
+  hips.add(shoulders);
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.52, 0.82), accent); // plate on the +x front face
+  chest.position.set(0.3, 0.62, 0);
   hips.add(chest);
 
-  // token-logo decal on the chest, facing the opponent (+x). Hidden until a texture loads.
+  // token-logo decal, clearly IN FRONT of the chest, facing the opponent (+x). Hidden until a texture loads.
   const chestScreen = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.66, 0.66),
+    new THREE.PlaneGeometry(0.78, 0.78),
     new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false }),
   );
-  chestScreen.position.set(0.34, 0.74, 0);
+  chestScreen.position.set(0.44, 0.64, 0);
   chestScreen.rotation.y = Math.PI / 2;
+  chestScreen.renderOrder = 5;
   chestScreen.visible = false;
   hips.add(chestScreen);
 
   const neck = new THREE.Group();
-  neck.position.y = 1.15;
+  neck.position.y = 1.18;
   hips.add(neck);
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.56, 0.56), body);
-  head.position.y = 0.3;
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.62, 0.62), body);
+  head.position.y = 0.34;
   head.castShadow = true;
   neck.add(head);
-  const eyeGeo = new THREE.BoxGeometry(0.1, 0.09, 0.05);
+  const eyeGeo = new THREE.BoxGeometry(0.12, 0.14, 0.06); // chunky PS1 eyes
   const eyeA = new THREE.Mesh(eyeGeo, eyeMat);
-  eyeA.position.set(0.29, 0.34, 0.15); // eyes on the +x (forward) face
+  eyeA.position.set(0.32, 0.38, 0.16); // eyes on the +x (forward) face
   const eyeB = new THREE.Mesh(eyeGeo, eyeMat);
-  eyeB.position.set(0.29, 0.34, -0.15);
+  eyeB.position.set(0.32, 0.38, -0.16);
   neck.add(eyeA, eyeB);
 
   const makeArm = (zSide: number) => {
     const sh = new THREE.Group();
-    sh.position.set(0.12, 0.95, zSide * 0.44); // shoulder
+    sh.position.set(0.06, 1.0, zSide * 0.52); // shoulder on the yoke
     hips.add(sh);
-    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.72, 10), body);
-    upper.rotation.z = -Math.PI / 2; // lay along +x
+    const upper = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.28, 0.3), body); // blocky arm along +x
     upper.position.x = 0.36;
     upper.castShadow = true;
     sh.add(upper);
-    const fist = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.28, 0.28), accent);
-    fist.position.x = 0.8;
+    const fist = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.36), accent); // big blocky glove
+    fist.position.x = 0.82;
+    fist.castShadow = true;
     sh.add(fist);
     return sh;
   };
@@ -70,15 +76,16 @@ function buildFighter(color: number) {
 
   const makeLeg = (xSide: number) => {
     const hp = new THREE.Group();
-    hp.position.set(0, 0, xSide * 0.24); // legs spread along z (side-to-side when facing +x)
+    hp.position.set(0, 0, xSide * 0.26); // legs spread along z (side-to-side when facing +x)
     hips.add(hp);
-    const l = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.13, 0.98, 10), body);
-    l.position.y = -0.52;
-    l.castShadow = true;
-    hp.add(l);
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.16, 0.3), body); // foot points +x (forward)
-    foot.position.set(0.14, -1.02, 0);
-    hp.add(foot);
+    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.34, 1.0, 0.38), body);
+    thigh.position.y = -0.54;
+    thigh.castShadow = true;
+    hp.add(thigh);
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.28, 0.44), body); // big blocky boot, points +x
+    boot.position.set(0.14, -1.05, 0);
+    boot.castShadow = true;
+    hp.add(boot);
     return hp;
   };
   const legL = makeLeg(-1);
@@ -206,7 +213,7 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
     const K = 16;
     // guard defaults
     let rootX = s.base, rootY = 0, rootRz = 0;
-    let hipsY = 1.05 + Math.sin(time * 3 + s.phase) * 0.045;
+    let hipsY = 1.18 + Math.sin(time * 3 + s.phase) * 0.045;
     let hipsRy = Math.sin(time * 1.4 + s.phase) * 0.05;
     let hipsRz = 0;
     let neckRx = Math.sin(time * 2 + s.phase) * 0.03, neckRz = 0;
