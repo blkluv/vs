@@ -77,6 +77,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); f
 .enter { font-family: var(--mono); font-size: 15px; font-weight: 700; letter-spacing: .04em; color: var(--bg); background: var(--lime); border: none; border-radius: 8px; padding: 14px 30px; cursor: pointer; }
 .enter:disabled { background: #1a221a; color: var(--muted); cursor: not-allowed; }
 .hint { color: #3a424a; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; margin-top: 12px; }
+.hitcounter { margin-top: 10px; color: var(--muted); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+.hitcounter .hc-n { color: var(--lime); font-weight: 700; }
 
 /* ---------------- paginated memecoin list ---------------- */
 .mlist { display: flex; flex-direction: column; gap: 6px; }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Arena } from "@/lib/arena";
 import { createMatch, applyFlow, tick, CFG, type MatchState } from "@/lib/fight";
 import { Commentator, speak, voiceAvailable, type Callout } from "@/lib/commentator";
+import { HitCounter, bumpFights } from "@/components/HitCounter";
 
 type FlowEvent = { symbol: string; side: "buy" | "sell"; amount: number; quoteValue: number };
 type Fighter = { symbol: string; count: number; buys: number; sells: number; logo: string | null; mcap: number | null; supply: number | null };
@@ -34,7 +35,7 @@ export default function Pit() {
   const [f, setF] = useState<{ left: Fighter; right: Fighter } | null>(null);
 
   if (phase === "select" || !f)
-    return <Select onStart={(l, r) => { setF({ left: l, right: r }); setPhase("intro"); }} />;
+    return <Select onStart={(l, r) => { setF({ left: l, right: r }); setPhase("intro"); bumpFights(); }} />;
   if (phase === "intro")
     return <Intro left={f.left} right={f.right} onDone={() => setPhase("fight")} />;
   return <Fight left={f.left} right={f.right} onExit={() => { setF(null); setPhase("select"); }} key={`${f.left.symbol}-${f.right.symbol}`} />;
@@ -209,6 +210,7 @@ function Select({ onStart }: { onStart: (l: Fighter, r: Fighter) => void }) {
           {picked.length < 2 ? `pick ${2 - picked.length} more` : `⚔ ${picked[0]}  vs  ${picked[1]}`}
         </button>
         <div className="hint">no token · pure spectacle · by jumpbox</div>
+        <HitCounter />
       </div>
     </div>
   );
