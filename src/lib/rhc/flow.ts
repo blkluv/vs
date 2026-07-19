@@ -1,6 +1,8 @@
 import { formatUnits, getContract, parseAbiItem, type Address, type Hex } from "viem";
 import { publicClient, ADDRESSES } from "./chain";
 import { erc8056Abi } from "./abis";
+import { isBlocked } from "./blocklist";
+import { enrich } from "./tokenmeta";
 
 const SWAP_EVENT = parseAbiItem(
   "event Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 fee)",
@@ -29,7 +31,18 @@ export type FlowEvent = {
   tx: Hex;
 };
 
-export type Trending = { symbol: string; coin: Address; poolId: string; buys: number; sells: number; count: number };
+export type Trending = {
+  symbol: string;
+  coin: Address;
+  poolId: string;
+  buys: number;
+  sells: number;
+  count: number;
+  decimals: number;
+  logo: string | null;
+  mcap: number | null;
+  supply: number | null;
+};
 
 type PoolMeta = {
   coin: Address;
@@ -117,6 +130,7 @@ export async function getFlow(sinceArg?: bigint): Promise<{
     const poolId = s.topics[1] as string;
     const meta = await getPoolMeta(poolId, latest);
     if (!meta) continue;
+    if (isBlocked(meta.symbol)) continue; // keep slurs off the roster + out of fights
 
     const args = s.args as { amount0: bigint; amount1: bigint };
     const coinAmt = meta.coinIndex === 0 ? args.amount0 : args.amount1;
@@ -139,7 +153,9 @@ export async function getFlow(sinceArg?: bigint): Promise<{
     });
 
     const key = meta.symbol;
-    const t = tally.get(key) ?? { symbol: meta.symbol, coin: meta.coin, poolId, buys: 0, sells: 0, count: 0 };
+    const t =
+      tally.get(key) ??
+      ({ symbol: meta.symbol, coin: meta.coin, poolId, buys: 0, sells: 0, count: 0, decimals: meta.coinDecimals, logo: null, mcap: null, supply: null } as Trending & { decimals: number });
     t.count++;
     if (side === "buy") t.buys++;
     else t.sells++;
@@ -147,6 +163,22 @@ export async function getFlow(sinceArg?: bigint): Promise<{
   }
 
   const trending = [...tally.values()].sort((a, b) => b.count - a.count).slice(0, 12);
+
+  // enrich the roster with logo + market cap (DexScreener) + total supply (on-chain)
+  try {
+    const metas = await enrich(trending.map((t) => ({ address: t.coin, decimals: t.decimals })));
+    for (const t of trending) {
+      const m = metas.get(t.coin.toLowerCase());
+      if (m) {
+        t.logo = m.logo;
+        t.mcap = m.mcap;
+        t.supply = m.supply;
+      }
+    }
+  } catch {
+    /* enrichment is best-effort */
+  }
+
   // keep only the most recent MAX_EVENTS, oldest-first so the client plays them in order
   const trimmed = events.slice(-MAX_EVENTS);
 

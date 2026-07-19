@@ -5,10 +5,10 @@
 export type Side = "left" | "right";
 
 export const CFG = {
-  HP_MAX: 1000,
-  ROUND_MS: 75_000,
+  HP_MAX: 1400,
+  ROUND_MS: 80_000,
   ROUNDS_TO_WIN: 2, // best of 3
-  BASE_DMG: 11,
+  BASE_DMG: 8,
   CHIP_MULT: 0.3, // fully-guarded hit lands at this fraction
   CLEAN_MULT: 1.0,
   CRIT_MULT: 1.8,
@@ -20,7 +20,15 @@ export const CFG = {
   GUARD_ON_BUY: 5, // per unit power, restores your guard
   GUARD_ON_SELL: 34, // per unit power, drains your guard
   GUARD_REGEN_PER_S: 3,
-  SELL_CHIP: 4, // per unit power, self chip
+  SELL_CHIP: 4, // per unit weight, self chip
+  // supply-weighting: a trade's economic heft = fraction of total supply it moves.
+  // REF fraction maps to weight 1.0; each 10x above/below shifts weight by K.
+  SUPPLY_REF: 0.0001, // 0.01% of supply == baseline blow
+  SUPPLY_K: 0.62,
+  WEIGHT_MIN: 0.15,
+  WEIGHT_MAX: 5,
+  CRIT_WEIGHT: 2.2, // a heavy enough blow crits on an exposed foe
+  // fallback when supply is unknown: normalize to the token's own recent median size
   POWER_MIN: 0.25,
   POWER_MAX: 4,
   ROLL_WINDOW: 24,
@@ -28,13 +36,14 @@ export const CFG = {
 
 export type FighterState = {
   symbol: string;
+  supply: number | null; // total supply (human units) — drives supply-weighted damage
   hp: number;
   guard: number;
   combo: number;
   comboExpiry: number;
   exposedUntil: number;
   roundsWon: number;
-  sizes: number[]; // rolling recent trade sizes for normalization
+  sizes: number[]; // rolling recent trade sizes (fallback normalization only)
 };
 
 export type Phase = "intro" | "fight" | "roundEnd" | "matchEnd";
@@ -58,14 +67,19 @@ export type Effect =
   | { type: "roundBanner"; text: string }
   | { type: "matchBanner"; text: string };
 
-function newFighter(symbol: string): FighterState {
-  return { symbol, hp: CFG.HP_MAX, guard: CFG.GUARD_MAX, combo: 0, comboExpiry: 0, exposedUntil: 0, roundsWon: 0, sizes: [] };
+function newFighter(symbol: string, supply: number | null): FighterState {
+  return { symbol, supply, hp: CFG.HP_MAX, guard: CFG.GUARD_MAX, combo: 0, comboExpiry: 0, exposedUntil: 0, roundsWon: 0, sizes: [] };
 }
 
-export function createMatch(leftSym: string, rightSym: string, now: number): MatchState {
+export function createMatch(
+  leftSym: string,
+  rightSym: string,
+  now: number,
+  supplies?: { left: number | null; right: number | null },
+): MatchState {
   return {
-    left: newFighter(leftSym),
-    right: newFighter(rightSym),
+    left: newFighter(leftSym, supplies?.left ?? null),
+    right: newFighter(rightSym, supplies?.right ?? null),
     round: 1,
     roundEndsAt: now + CFG.ROUND_MS,
     phase: "intro",
@@ -82,12 +96,24 @@ const median = (arr: number[]) => {
   return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
 };
 
-function powerOf(f: FighterState, size: number): number {
-  f.sizes.push(size);
+/**
+ * A trade's economic weight. Primary path: fraction of the token's TOTAL SUPPLY the
+ * trade moves, log-scaled around SUPPLY_REF (0.01% of supply = weight 1.0). This is
+ * what makes a whale move on a 1B-supply coin land differently than the same token
+ * count on a 100B-supply coin. Fallback (supply unknown): normalize to the token's
+ * own recent median trade size.
+ */
+function weightOf(f: FighterState, amount: number): number {
+  if (f.supply && f.supply > 0) {
+    const frac = Math.max(amount / f.supply, 1e-12);
+    const w = 1 + Math.log10(frac / CFG.SUPPLY_REF) * CFG.SUPPLY_K;
+    return Math.max(CFG.WEIGHT_MIN, Math.min(CFG.WEIGHT_MAX, w));
+  }
+  f.sizes.push(amount);
   if (f.sizes.length > CFG.ROLL_WINDOW) f.sizes.shift();
   const med = median(f.sizes);
   if (med <= 0) return 1;
-  return Math.max(CFG.POWER_MIN, Math.min(CFG.POWER_MAX, size / med));
+  return Math.max(CFG.POWER_MIN, Math.min(CFG.POWER_MAX, amount / med));
 }
 
 function comboMult(f: FighterState): number {
@@ -98,7 +124,7 @@ function comboMult(f: FighterState): number {
 /** Feed one classified flow event. Returns visual effects. Mutates state. */
 export function applyFlow(
   state: MatchState,
-  ev: { symbol: string; side: "buy" | "sell"; quoteValue: number },
+  ev: { symbol: string; side: "buy" | "sell"; amount: number; quoteValue?: number },
   now: number,
 ): Effect[] {
   if (state.phase !== "fight") return [];
@@ -108,38 +134,37 @@ export function applyFlow(
 
   const me = state[side];
   const foe = state[other(side)];
-  const power = powerOf(me, ev.quoteValue);
+  const weight = weightOf(me, ev.amount); // supply-weighted economic heft
   const effects: Effect[] = [];
 
   if (ev.side === "buy") {
-    // buying me restores my guard, and I strike the opponent
-    me.guard = Math.min(CFG.GUARD_MAX, me.guard + CFG.GUARD_ON_BUY * power);
-    // combo
+    // buying me restores my guard (scaled by heft), and I strike the opponent
+    me.guard = Math.min(CFG.GUARD_MAX, me.guard + CFG.GUARD_ON_BUY * weight);
     me.combo = now < me.comboExpiry ? me.combo + 1 : 0;
     me.comboExpiry = now + CFG.COMBO_WINDOW_MS;
 
     // Continuous guard mitigation: full guard softens to chip, empty guard lands clean.
-    // A recent sell (exposed) ignores guard entirely and can crit.
+    // A recent sell (exposed) ignores guard entirely and a heavy blow crits.
     const exposed = now < foe.exposedUntil;
     const gf = foe.guard / CFG.GUARD_MAX; // 0..1
     let landMult: number;
     let crit = false;
     if (exposed) {
-      crit = me.combo >= 2 || power > 1.8;
+      crit = me.combo >= 2 || weight > CFG.CRIT_WEIGHT;
       landMult = crit ? CFG.CRIT_MULT : CFG.CLEAN_MULT;
     } else {
       landMult = CFG.CHIP_MULT + (CFG.CLEAN_MULT - CFG.CHIP_MULT) * (1 - gf);
     }
-    const dmg = CFG.BASE_DMG * power * landMult * comboMult(me);
+    const dmg = CFG.BASE_DMG * weight * landMult * comboMult(me);
     foe.hp = Math.max(0, foe.hp - dmg);
     const blocked = !exposed && gf >= CFG.BLOCK_AT;
-    effects.push({ type: "strike", side, power, crit, blocked, combo: me.combo });
+    effects.push({ type: "strike", side, power: weight, crit, blocked, combo: me.combo });
   } else {
-    // selling me drains my guard and exposes me; small self chip (can't KO)
-    me.guard = Math.max(0, me.guard - CFG.GUARD_ON_SELL * power);
+    // selling me drains my guard (scaled by heft) and exposes me; small self chip (can't KO)
+    me.guard = Math.max(0, me.guard - CFG.GUARD_ON_SELL * weight);
     me.exposedUntil = now + CFG.EXPOSE_MS;
     me.combo = 0;
-    me.hp = Math.max(1, me.hp - CFG.SELL_CHIP * power);
+    me.hp = Math.max(1, me.hp - CFG.SELL_CHIP * weight);
     effects.push({ type: "stagger", side });
     effects.push({ type: "expose", side });
   }

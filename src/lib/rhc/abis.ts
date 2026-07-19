@@ -16,6 +16,13 @@ export const erc8056Abi = [
   },
   {
     type: "function",
+    name: "totalSupply",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
     name: "symbol",
     stateMutability: "view",
     inputs: [],
