@@ -6,9 +6,12 @@ export const runtime = "nodejs";
 // Unique visitors (HyperLogLog) + total fights started. Degrades gracefully to
 // null counts when Upstash isn't configured, so the counter simply hides.
 function redis(): Redis | null {
+  // support both Upstash-native and Vercel KV env var names
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return null;
   try {
-    if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) return null;
-    return Redis.fromEnv();
+    return new Redis({ url, token });
   } catch {
     return null;
   }
