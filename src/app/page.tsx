@@ -157,8 +157,8 @@ function Select({ onStart }: { onStart: (l: Fighter, r: Fighter) => void }) {
   return (
     <div className="select">
       <div className="s-head">
-        <h1>THE PIT</h1>
-        <div className="s-sub">pick two Robinhood Chain memecoins · their live order flow does the fighting</div>
+        <h1>🆚</h1>
+        <div className="s-sub">Pick two Robinhood Chain coins, their live order flow does the fighting.</div>
       </div>
 
       {roster.length === 0 ? (
