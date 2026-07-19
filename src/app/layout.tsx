@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
-const APP_URL = "https://pit.jumpbox.tech";
+const APP_URL = "https://vs.hoodmemes.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(APP_URL),
-  title: "Pit — Robinhood Chain order flow as a fight",
+  title: "VS — Robinhood Chain order flow as a fight",
   description:
-    "Live buys and sells on trending Robinhood Chain tokens, rendered as a 3D brawl. No token, just spectacle. By jumpbox.",
+    "Live buys and sells on trending Robinhood Chain tokens, rendered as a 3D brawl. No token, just spectacle. By Hood Memes.",
   openGraph: {
     title: "Pit — Robinhood Chain order flow as a fight",
     description: "Pick two trending memecoins; their live buys and sells drive a 3D brawl. Buys strike, sells expose.",
