@@ -380,7 +380,7 @@ function Fight({ left, right, onExit }: { left: Fighter; right: Fighter; onExit:
         {st?.phase === "matchEnd" && (
           <div className="endbtns"><button onClick={onExit}>← new match</button></div>
         )}
-        <div className="foot">live on Robinhood Chain · by jumpbox</div>
+        <div className="foot">Live on Robinhood Chain · by Hoodmemes.com</div>
       </div>
     </>
   );
