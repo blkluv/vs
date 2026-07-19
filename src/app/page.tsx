@@ -208,6 +208,7 @@ function Fight({ left, right, onExit }: { left: Fighter; right: Fighter; onExit:
       const { createArena } = await import("@/lib/arena");
       if (!alive || !canvasRef.current) return;
       const arena = createArena(canvasRef.current);
+      arena.setFighters({ hue: hue(left.symbol) }, { hue: hue(right.symbol) });
       arenaRef.current = arena;
       stateRef.current = createMatch(left.symbol, right.symbol, Date.now(), { left: left.supply, right: right.supply });
 
