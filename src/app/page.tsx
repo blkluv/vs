@@ -18,6 +18,7 @@ function hue(sym: string) {
 }
 const cardColor = (sym: string) => `hsl(${hue(sym)} 80% 60%)`;
 const fmtCap = (n: number | null) => (n == null ? "—" : n >= 1e9 ? `$${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}K` : `$${n.toFixed(0)}`);
+const fmtAmt = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : n.toFixed(0));
 
 export default function Pit() {
   const [match, setMatch] = useState<{ left: Fighter; right: Fighter } | null>(null);
@@ -101,6 +102,8 @@ function Fight({ left, right, onExit }: { left: Fighter; right: Fighter; onExit:
   const stateRef = useRef<MatchState | null>(null);
   const queue = useRef<FlowEvent[]>([]);
   const cursor = useRef<string | undefined>(undefined);
+  const flow = useRef<{ side: "left" | "right"; buy: boolean; amount: number; id: number }[]>([]);
+  const flowId = useRef(0);
   const commentator = useRef(new Commentator());
   const mutedRef = useRef(false);
   const [muted, setMuted] = useState(false);
@@ -134,11 +137,10 @@ function Fight({ left, right, onExit }: { left: Fighter; right: Fighter; onExit:
           if (e.type === "strike") {
             arena.strike(e.side, e.blocked ? e.power * 0.35 : e.power, e.crit);
             const a = symOf(e.side), b = symOf(e.side === "left" ? "right" : "left");
-            if (e.blocked) fire(c.say(now, "block", { a, b }));
-            else if (e.crit) fire(c.say(now, "crit", { a, b }));
-            else if (e.combo >= 3) fire(c.say(now, "combo", { n: e.combo + 1, a, b }));
-            else if (e.power > 2.4) fire(c.say(now, "bigStrike", { a, b }));
-            else fire(c.say(now, "strike", { a, b }));
+            // only the notable moments get called — jabs and blocks stay silent
+            if (e.crit) fire(c.say(now, "crit", { a, b }));
+            else if (e.combo >= 4) fire(c.say(now, "combo", { n: e.combo + 1, a, b }));
+            else if (e.power > 2.6) fire(c.say(now, "bigStrike", { a, b }));
           } else if (e.type === "stagger") {
             arena.stagger(e.side, 0.8);
           } else if (e.type === "expose") {
@@ -170,7 +172,11 @@ function Fight({ left, right, onExit }: { left: Fighter; right: Fighter; onExit:
         const st = stateRef.current!;
         const e = queue.current.shift();
         const now = Date.now();
-        if (e && st.phase === "fight") applyEffects(applyFlow(st, e, now), now);
+        if (e && st.phase === "fight") {
+          const fside: "left" | "right" = e.symbol === left.symbol ? "left" : "right";
+          flow.current = [{ side: fside, buy: e.side === "buy", amount: e.amount, id: flowId.current++ }, ...flow.current].slice(0, 14);
+          applyEffects(applyFlow(st, e, now), now);
+        }
         repaint();
       }, 360);
       ticker = setInterval(() => {
@@ -218,6 +224,11 @@ function Fight({ left, right, onExit }: { left: Fighter; right: Fighter; onExit:
             </div>
             <div className="hpwrap"><div className="hp" style={{ width: pct(st?.left.hp ?? CFG.HP_MAX), background: LIME }} /></div>
             <div className="guardwrap"><div className="guard" style={{ width: `${st?.left.guard ?? 100}%` }} /></div>
+            <div className="flowline">
+              {flow.current.filter((x) => x.side === "left").slice(0, 5).map((x) => (
+                <span key={x.id} className={x.buy ? "fb" : "fs"}>{x.buy ? "▲" : "▼"}{fmtAmt(x.amount)}</span>
+              ))}
+            </div>
             {(st?.left.combo ?? 0) >= 2 && <div className="combo" style={{ color: LIME }}>combo ×{st!.left.combo + 1}</div>}
           </div>
           <div className="fighter r">
@@ -226,6 +237,11 @@ function Fight({ left, right, onExit }: { left: Fighter; right: Fighter; onExit:
             </div>
             <div className="hpwrap"><div className="hp r" style={{ width: pct(st?.right.hp ?? CFG.HP_MAX), background: RED, marginLeft: "auto" }} /></div>
             <div className="guardwrap"><div className="guard r" style={{ width: `${st?.right.guard ?? 100}%`, marginLeft: "auto" }} /></div>
+            <div className="flowline r">
+              {flow.current.filter((x) => x.side === "right").slice(0, 5).map((x) => (
+                <span key={x.id} className={x.buy ? "fb" : "fs"}>{x.buy ? "▲" : "▼"}{fmtAmt(x.amount)}</span>
+              ))}
+            </div>
             {(st?.right.combo ?? 0) >= 2 && <div className="combo r" style={{ color: RED }}>combo ×{st!.right.combo + 1}</div>}
           </div>
         </div>

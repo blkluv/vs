@@ -41,6 +41,10 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); f
 .pips i { width: 9px; height: 9px; border: 1px solid #2a3340; display: inline-block; }
 .pips i.on { background: var(--lime); border-color: var(--lime); }
 .fighter.r .pips i.on { background: var(--red); border-color: var(--red); }
+.flowline { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; min-height: 16px; }
+.fighter.r .flowline { justify-content: flex-end; }
+.flowline span { font-size: 10.5px; letter-spacing: .02em; padding: 1px 5px; border: 1px solid #14201a; background: rgba(10,14,10,.6); border-radius: 3px; }
+.flowline .fb { color: var(--lime); } .flowline .fs { color: var(--red); }
 .combo { font-size: 12px; margin-top: 6px; font-weight: 700; letter-spacing: .04em; animation: pop .18s ease; }
 .fighter.r .combo { text-align: right; }
 @keyframes pop { from { transform: scale(1.4); } to { transform: scale(1); } }

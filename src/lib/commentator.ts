@@ -51,15 +51,14 @@ export class Commentator {
   private id = 0;
   private lastAt = 0;
   private last = "";
-  private minGapMs = 1100;
+  private minGapMs = 3400; // keep it sparse — a color commentator, not play-by-play on every volley
 
-  /** Maybe produce a callout. High-intensity kinds bypass most of the throttle. */
+  /** Maybe produce a callout. Only KOs and round calls bypass the gap. */
   say(now: number, kind: keyof typeof POOLS, vars: Record<string, string | number> = {}): Callout | null {
     const pool = POOLS[kind];
     if (!pool) return null;
-    const urgent = pool.intensity === "high";
-    if (!urgent && now - this.lastAt < this.minGapMs) return null;
-    if (urgent && now - this.lastAt < 350) return null;
+    const alwaysFire = kind === "ko" || kind === "round";
+    if (!alwaysFire && now - this.lastAt < this.minGapMs) return null;
     let text = fill(pool.lines[Math.floor((now / 137) % pool.lines.length)], vars);
     if (text === this.last) text = fill(pool.lines[Math.floor((now / 91 + 1) % pool.lines.length)], vars);
     this.last = text;
