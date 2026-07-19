@@ -27,6 +27,16 @@ function buildFighter(color: number) {
   chest.position.set(0.28, 0.72, 0);
   hips.add(chest);
 
+  // token-logo decal on the chest, facing the opponent (+x). Hidden until a texture loads.
+  const chestScreen = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.66, 0.66),
+    new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false }),
+  );
+  chestScreen.position.set(0.34, 0.74, 0);
+  chestScreen.rotation.y = Math.PI / 2;
+  chestScreen.visible = false;
+  hips.add(chestScreen);
+
   const neck = new THREE.Group();
   neck.position.y = 1.15;
   hips.add(neck);
@@ -74,12 +84,21 @@ function buildFighter(color: number) {
   const legL = makeLeg(-1);
   const legR = makeLeg(1);
 
-  return { root, hips, neck, armF, armB, legL, legR, mats: { body, accent, eyeMat } };
+  // colored presence glow on the floor beneath the fighter
+  const glow = new THREE.Mesh(
+    new THREE.CircleGeometry(1.55, 44),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }),
+  );
+  glow.rotation.x = -Math.PI / 2;
+  glow.position.y = 0.02;
+  root.add(glow);
+
+  return { root, hips, neck, armF, armB, legL, legR, chestScreen, glow, mats: { body, accent, eyeMat } };
 }
 type FighterRig = ReturnType<typeof buildFighter>;
 
 export type Arena = {
-  setFighters: (a: { hue: number }, b: { hue: number }) => void;
+  setFighters: (a: { hue: number; logo?: string | null }, b: { hue: number; logo?: string | null }) => void;
   strike: (attacker: Side, power: number, crit?: boolean) => void;
   stagger: (who: Side, power: number) => void;
   ko: (loser: Side) => void;
@@ -289,14 +308,33 @@ export function createArena(canvas: HTMLCanvasElement): Arena {
 
   return {
     setFighters(a, b) {
-      const recolor = (F: FighterRig, hex: number) => {
+      const loader = new THREE.TextureLoader();
+      const apply = (F: FighterRig, opt: { hue: number; logo?: string | null }) => {
+        const hex = hexFromHue(opt.hue);
         F.mats.accent.color.setHex(hex);
         F.mats.accent.emissive.setHex(hex);
         F.mats.body.color.copy(new THREE.Color(hex).multiplyScalar(0.34));
         F.mats.eyeMat.emissive.setHex(hex);
+        (F.glow.material as THREE.MeshBasicMaterial).color.setHex(hex);
+        if (opt.logo) {
+          loader.load(
+            `/api/logo?url=${encodeURIComponent(opt.logo)}`,
+            (tex) => {
+              tex.colorSpace = THREE.SRGBColorSpace;
+              const m = F.chestScreen.material as THREE.MeshBasicMaterial;
+              m.map = tex;
+              m.needsUpdate = true;
+              F.chestScreen.visible = true;
+            },
+            undefined,
+            () => { F.chestScreen.visible = false; }, // load/CORS failure -> color only
+          );
+        } else {
+          F.chestScreen.visible = false;
+        }
       };
-      recolor(left, hexFromHue(a.hue));
-      recolor(right, hexFromHue(b.hue));
+      apply(left, a);
+      apply(right, b);
     },
     strike(attacker, power, crit) {
       if (koActive) return;

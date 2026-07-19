@@ -35,8 +35,11 @@ async function fetchDexBatch(addrs: Address[]): Promise<Map<string, Partial<Toke
         }
         for (const [a, pairs] of byToken) {
           const best = pairs.sort((x, y) => (y.liquidity?.usd || 0) - (x.liquidity?.usd || 0))[0];
+          // the logo lives in `info` which is only attached to SOME of a token's pairs,
+          // not necessarily the most-liquid one — so scan them all.
+          const logo = pairs.find((p) => p.info?.imageUrl)?.info?.imageUrl ?? null;
           out.set(a, {
-            logo: best.info?.imageUrl ?? null,
+            logo,
             priceUsd: best.priceUsd ? Number(best.priceUsd) : null,
             mcap: best.marketCap ?? best.fdv ?? null,
             liq: best.liquidity?.usd ?? null,
